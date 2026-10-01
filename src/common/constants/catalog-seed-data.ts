@@ -183,7 +183,7 @@ export const CATALOG_SERVICE_SEEDS: CatalogServiceSeed[] = [
     categorySlug: 'transport-logistique',
     shortDescription: 'Conduite et déplacement.',
     displayOrder: 2,
-    minimumAge: 16,
+    minimumAge: 18,
   },
   {
     slug: 'manutention',
@@ -265,7 +265,7 @@ export const CATALOG_SERVICE_SEEDS: CatalogServiceSeed[] = [
     categorySlug: 'beaute-bien-etre',
     shortDescription: 'Massage bien-être.',
     displayOrder: 3,
-    minimumAge: 16,
+    minimumAge: 18,
   },
   // Famille & Accompagnement
   {
@@ -315,7 +315,7 @@ export const CATALOG_SERVICE_SEEDS: CatalogServiceSeed[] = [
     categorySlug: 'accueil-surveillance-commerce',
     shortDescription: 'Gardiennage de sites.',
     displayOrder: 3,
-    minimumAge: 16,
+    minimumAge: 18,
   },
   {
     slug: 'agent-securite',
@@ -323,7 +323,7 @@ export const CATALOG_SERVICE_SEEDS: CatalogServiceSeed[] = [
     categorySlug: 'accueil-surveillance-commerce',
     shortDescription: 'Surveillance et sécurité.',
     displayOrder: 4,
-    minimumAge: 16,
+    minimumAge: 18,
   },
   // Auto & Dépannage
   {
@@ -348,7 +348,7 @@ export const CATALOG_SERVICE_SEEDS: CatalogServiceSeed[] = [
     categorySlug: 'auto-depannage',
     shortDescription: 'Assistance et dépannage.',
     displayOrder: 3,
-    minimumAge: 16,
+    minimumAge: 18,
   },
   {
     slug: 'vulcanisation-pneus',

@@ -13,9 +13,12 @@ services:
     healthCheckPath: /api/v1/health/live
     buildCommand: npm ci && npm run build
     startCommand: npm run start:prod
-    preDeployCommand: npm run prisma:migrate:deploy
+    preDeployCommand: npm run db:prod:deploy
+    # Start = runtime only (no migrate reset / migrate dev / seed)
     envVars:
       - key: NODE_ENV
+        value: production
+      - key: DATABASE_ENV
         value: production
       - key: NODE_VERSION
         value: "20.19.0"

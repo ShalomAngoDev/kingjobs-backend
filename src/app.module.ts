@@ -18,6 +18,7 @@ import { EligibilityModule } from './modules/eligibility/eligibility.module';
 import { HealthModule } from './modules/health/health.module';
 import { JobbersModule } from './modules/jobbers/jobbers.module';
 import { MetaModule } from './modules/meta/meta.module';
+import { MissionsModule } from './modules/missions/missions.module';
 import { UsersModule } from './modules/users/users.module';
 
 @Module({
@@ -48,6 +49,7 @@ import { UsersModule } from './modules/users/users.module';
     CatalogModule,
     EligibilityModule,
     JobbersModule,
+    MissionsModule,
     HealthModule,
     MetaModule,
   ],

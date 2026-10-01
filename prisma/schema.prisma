@@ -69,6 +69,77 @@ enum ServiceRequirementType {
   LEGAL_GUARDIAN_APPROVAL
 }
 
+enum MissionStatus {
+  DRAFT
+  PUBLISHED
+  APPLICATION_SELECTED
+  PAYMENT_REQUIRED
+  CONFIRMED
+  READY_TO_START
+  IN_PROGRESS
+  COMPLETION_PENDING
+  COMPLETED
+  CANCELLED
+  DISPUTED
+}
+
+enum MissionApplicationStatus {
+  PENDING
+  WITHDRAWN
+  SELECTED
+  REJECTED
+}
+
+enum MissionVerificationType {
+  START_CODE
+  START_QR
+  END_CODE
+  END_QR
+}
+
+enum MissionActorType {
+  CLIENT
+  JOBBER
+  ADMIN
+  SYSTEM
+}
+
+enum MissionCancellationReason {
+  CLIENT_CHANGED_MIND
+  JOBBER_UNAVAILABLE
+  SCHEDULE_CONFLICT
+  UNSAFE_CONDITIONS
+  OTHER
+}
+
+enum MissionIncidentType {
+  JOBBER_NO_SHOW
+  CLIENT_NO_SHOW
+  SAFETY
+  SERVICE_QUALITY
+  PAYMENT
+  BEHAVIOR
+  OTHER
+}
+
+enum MissionIncidentStatus {
+  OPEN
+  UNDER_REVIEW
+  RESOLVED
+  CLOSED
+}
+
+enum MissionRiskFlag {
+  DRIVING
+  ROAD_INTERVENTION
+  WORK_AT_HEIGHT
+  LIVE_ELECTRICAL_WORK
+  HEAVY_MACHINERY
+  HAZARDOUS_EQUIPMENT
+  NIGHT_SECURITY
+  OTHER_RESTRICTED_ACTIVITY
+}
+
 model User {
   id                         String                     @id @default(uuid()) @db.Uuid
   firstName                  String                     @map("first_name") @db.VarChar(80)
@@ -96,6 +167,12 @@ model User {
   accountTokens    AccountToken[]
   phoneOtps        PhoneOtp[]
   termsAcceptances TermsAcceptance[]
+  clientMissions   Mission[]            @relation("MissionClient")
+  selectedMissions Mission[]            @relation("MissionSelectedJobber")
+  missionApplications MissionApplication[]
+  missionCancellations MissionCancellation[]
+  missionIncidents     MissionIncident[]     @relation("IncidentReporter")
+  missionStatusEvents  MissionStatusHistory[]
 
   @@index([status])
   @@map("users")
@@ -160,10 +237,11 @@ model Service {
   createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt        DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  category     ServiceCategory      @relation(fields: [categoryId], references: [id], onDelete: Restrict)
-  requirements ServiceRequirement[]
+  category       ServiceCategory      @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  requirements   ServiceRequirement[]
   jobberServices JobberService[]
-  skills       JobberSkill[]
+  skills         JobberSkill[]
+  missions       Mission[]
 
   @@index([categoryId, isActive, displayOrder])
   @@index([isActive])
@@ -331,4 +409,154 @@ model TermsAcceptance {
 
   @@index([userId])
   @@map("terms_acceptances")
+}
+
+/// Montants : `clientPriceAmount` = entier en FCFA (XOF), sans subdivision.
+/// Référence lisible via séquence PostgreSQL `mission_reference_seq` (pas count+1).
+model Mission {
+  id                       String        @id @default(uuid()) @db.Uuid
+  reference                String        @unique @db.VarChar(32)
+  clientUserId             String        @map("client_user_id") @db.Uuid
+  serviceId                String        @map("service_id") @db.Uuid
+  title                    String        @db.VarChar(160)
+  description              String        @db.VarChar(4000)
+  countryCode              String        @default("BJ") @map("country_code") @db.Char(2)
+  city                     String        @db.VarChar(120)
+  district                 String?       @db.VarChar(120)
+  addressLine              String?       @map("address_line") @db.VarChar(255)
+  latitude                 Decimal?      @db.Decimal(9, 6)
+  longitude                Decimal?      @db.Decimal(9, 6)
+  scheduledStartAt         DateTime?     @map("scheduled_start_at") @db.Timestamptz(6)
+  estimatedDurationMinutes Int?          @map("estimated_duration_minutes")
+  /// Prix client en FCFA entiers (XOF) — jamais Float.
+  clientPriceAmount        Int           @map("client_price_amount")
+  currency                 String        @default("XOF") @db.Char(3)
+  minimumAge               Int           @default(16) @map("minimum_age")
+  riskFlags                MissionRiskFlag[] @map("risk_flags")
+  status                   MissionStatus @default(DRAFT)
+  selectedJobberUserId     String?       @map("selected_jobber_user_id") @db.Uuid
+  serviceNameSnapshot      String        @map("service_name_snapshot") @db.VarChar(120)
+  serviceSlugSnapshot      String        @map("service_slug_snapshot") @db.VarChar(120)
+  categoryNameSnapshot     String        @map("category_name_snapshot") @db.VarChar(120)
+  categorySlugSnapshot     String        @map("category_slug_snapshot") @db.VarChar(120)
+  publishedAt              DateTime?     @map("published_at") @db.Timestamptz(6)
+  assignedAt               DateTime?     @map("assigned_at") @db.Timestamptz(6)
+  confirmedAt              DateTime?     @map("confirmed_at") @db.Timestamptz(6)
+  startedAt                DateTime?     @map("started_at") @db.Timestamptz(6)
+  completionRequestedAt    DateTime?     @map("completion_requested_at") @db.Timestamptz(6)
+  completedAt              DateTime?     @map("completed_at") @db.Timestamptz(6)
+  cancelledAt              DateTime?     @map("cancelled_at") @db.Timestamptz(6)
+  createdAt                DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  client         User                   @relation("MissionClient", fields: [clientUserId], references: [id], onDelete: Restrict)
+  selectedJobber User?                  @relation("MissionSelectedJobber", fields: [selectedJobberUserId], references: [id], onDelete: SetNull)
+  service        Service                @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+  applications   MissionApplication[]
+  verifications  MissionVerification[]
+  cancellations  MissionCancellation[]
+  incidents      MissionIncident[]
+  statusHistory  MissionStatusHistory[]
+
+  @@index([clientUserId, status])
+  @@index([selectedJobberUserId, status])
+  @@index([serviceId, status])
+  @@index([status, publishedAt])
+  @@index([city, countryCode])
+  @@map("missions")
+}
+
+model MissionApplication {
+  id           String                   @id @default(uuid()) @db.Uuid
+  missionId    String                   @map("mission_id") @db.Uuid
+  jobberUserId String                   @map("jobber_user_id") @db.Uuid
+  message      String?                  @db.VarChar(1000)
+  status       MissionApplicationStatus @default(PENDING)
+  appliedAt    DateTime                 @default(now()) @map("applied_at") @db.Timestamptz(6)
+  withdrawnAt  DateTime?                @map("withdrawn_at") @db.Timestamptz(6)
+  selectedAt   DateTime?                @map("selected_at") @db.Timestamptz(6)
+  rejectedAt   DateTime?                @map("rejected_at") @db.Timestamptz(6)
+  createdAt    DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime                 @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  mission Mission @relation(fields: [missionId], references: [id], onDelete: Cascade)
+  jobber  User    @relation(fields: [jobberUserId], references: [id], onDelete: Cascade)
+
+  @@unique([missionId, jobberUserId])
+  @@index([jobberUserId, status])
+  @@index([missionId, status])
+  @@map("mission_applications")
+}
+
+model MissionVerification {
+  id         String                  @id @default(uuid()) @db.Uuid
+  missionId  String                  @map("mission_id") @db.Uuid
+  type       MissionVerificationType
+  secretHash String                  @map("secret_hash")
+  expiresAt  DateTime?               @map("expires_at") @db.Timestamptz(6)
+  usedAt     DateTime?               @map("used_at") @db.Timestamptz(6)
+  attempts   Int                     @default(0)
+  maxAttempts Int                    @default(5) @map("max_attempts")
+  createdByUserId String?            @map("created_by_user_id") @db.Uuid
+  createdAt  DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime                @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  mission Mission @relation(fields: [missionId], references: [id], onDelete: Cascade)
+
+  @@index([missionId, type, usedAt])
+  @@map("mission_verifications")
+}
+
+model MissionCancellation {
+  id                String                     @id @default(uuid()) @db.Uuid
+  missionId         String                     @map("mission_id") @db.Uuid
+  initiatedByUserId String                     @map("initiated_by_user_id") @db.Uuid
+  actorType         MissionActorType           @map("actor_type")
+  reasonCode        MissionCancellationReason  @map("reason_code")
+  reasonText        String?                    @map("reason_text") @db.VarChar(1000)
+  previousStatus    MissionStatus              @map("previous_status")
+  createdAt         DateTime                   @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  mission     Mission @relation(fields: [missionId], references: [id], onDelete: Cascade)
+  initiatedBy User    @relation(fields: [initiatedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([missionId])
+  @@map("mission_cancellations")
+}
+
+model MissionIncident {
+  id               String                @id @default(uuid()) @db.Uuid
+  missionId        String                @map("mission_id") @db.Uuid
+  reportedByUserId String                @map("reported_by_user_id") @db.Uuid
+  type             MissionIncidentType
+  description      String                @db.VarChar(2000)
+  status           MissionIncidentStatus @default(OPEN)
+  blocksMission    Boolean               @default(false) @map("blocks_mission")
+  createdAt        DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime              @updatedAt @map("updated_at") @db.Timestamptz(6)
+  resolvedAt       DateTime?             @map("resolved_at") @db.Timestamptz(6)
+
+  mission    Mission @relation(fields: [missionId], references: [id], onDelete: Cascade)
+  reportedBy User    @relation("IncidentReporter", fields: [reportedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([missionId, status])
+  @@index([status])
+  @@map("mission_incidents")
+}
+
+model MissionStatusHistory {
+  id          String         @id @default(uuid()) @db.Uuid
+  missionId   String         @map("mission_id") @db.Uuid
+  fromStatus  MissionStatus? @map("from_status")
+  toStatus    MissionStatus  @map("to_status")
+  actorUserId String?        @map("actor_user_id") @db.Uuid
+  reason      String?        @db.VarChar(500)
+  metadata    Json?
+  createdAt   DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  mission Mission @relation(fields: [missionId], references: [id], onDelete: Cascade)
+  actor   User?   @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([missionId, createdAt])
+  @@map("mission_status_history")
 }

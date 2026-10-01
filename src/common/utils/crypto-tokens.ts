@@ -13,3 +13,8 @@ export function generateOpaqueToken(bytes = 32): string {
 export function generateOtpCode(): string {
   return randomInt(0, 1_000_000).toString().padStart(6, '0');
 }
+
+/** Code mission à 4 chiffres (0000–9999), via CSPRNG. */
+export function generateFourDigitCode(): string {
+  return randomInt(0, 10_000).toString().padStart(4, '0');
+}

@@ -1,11 +1,16 @@
 # Database — KingJOBS API
 
+> **Sécurité / garde-fous Prisma :** voir **[DATABASE-SAFETY.md](./DATABASE-SAFETY.md)**  
+> **Incidents :** **[DATABASE-INCIDENT-RUNBOOK.md](./DATABASE-INCIDENT-RUNBOOK.md)**
+
 ## PostgreSQL / Neon
 
 - Provider Prisma : `postgresql`
 - Runtime : `DATABASE_URL` (idéalement pooled Neon)
 - Migrations : `DIRECT_URL` (unpooled / direct Neon)
-- Projet Neon existant partagé avec le site public
+- Shadow (dev only) : `SHADOW_DATABASE_URL` — branche dédiée, **jamais** production
+- `DATABASE_ENV` : `production` | `development` | `test`
+- Projet Neon partagé avec le site public (branches recommandées : production / development / shadow)
 
 ## Ownership actuel
 
@@ -15,7 +20,8 @@
 | Schéma `neon_auth.*` | Neon Auth (plateforme) | Hors scope — ne pas modifier |
 | Tables auth Nest (`users`, `sessions`, …) | NestJS + Prisma Migrate | Migration `20261001140000_auth_identity` |
 | Catalogue / Jobber métier | NestJS + Prisma Migrate | Migration `20261001160000_service_catalog_jobber_eligibility` |
-| Futures tables missions… | NestJS + Prisma Migrate | Backend 04+ |
+| Missions (`missions`, `mission_applications`, `mission_verifications`, `mission_cancellations`, `mission_incidents`, `mission_status_history`) + séquence `mission_reference_seq` | NestJS + Prisma Migrate | Migration `20261002100000_missions_domain` (additive, ne touche pas aux tables pré-lancement) |
+| Futures tables paiements, avis… | NestJS + Prisma Migrate | Backend 05+ |
 
 Les modèles pré-lancement ne sont **plus** dans `schema.prisma` (évite toute migration qui les recrée). Ils restent documentés ci-dessous.
 

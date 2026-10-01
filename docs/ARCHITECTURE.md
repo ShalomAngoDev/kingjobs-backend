@@ -29,10 +29,12 @@ src/
 - `health`, `meta` — Backend 01
 - `auth`, `users`, `jobbers` — Backend 02 (+ extensions profil Backend 03)
 - `catalog`, `eligibility` — Backend 03 (catalogue, exigences, éligibilité)
+- `missions` — Backend 04 (cycle de vie, candidatures, vérifications code/QR, annulations, incidents, admin) — voir [MISSIONS-LIFECYCLE.md](MISSIONS-LIFECYCLE.md)
+- Garde-fous DB — Backend 04.1 (`src/common/db`, `scripts/db-guard.ts`) — voir [DATABASE-SAFETY.md](DATABASE-SAFETY.md)
 
 ## Modules futurs (non créés maintenant)
 
-missions, matching, payments, payouts, documents (upload), reviews, disputes,
+matching, payments, payouts, documents (upload), reviews, disputes,
 notifications, admin élargi, audit, support.
 
 Ils s'ajouteront comme modules Nest sans refactor massif grâce à :

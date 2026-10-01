@@ -11,10 +11,27 @@ API centrale KingJOBS — **modular monolith NestJS**.
 
 ```bash
 cp .env.example .env
-# Renseigner DATABASE_URL, DIRECT_URL, JWT_ACCESS_SECRET (≥32 chars)
+# DATABASE_ENV=development
+# DATABASE_URL / DIRECT_URL = branche Neon **development**
+# SHADOW_DATABASE_URL = branche Neon **shadow/test** (jamais la prod)
+# JWT_ACCESS_SECRET (≥32 chars)
 npm ci
-npm run prisma:generate
+npm run db:dev:generate
 ```
+
+## Sécurité base de données (Backend 04.1)
+
+**Lire avant toute migration :** [docs/DATABASE-SAFETY.md](docs/DATABASE-SAFETY.md)  
+**Incidents :** [docs/DATABASE-INCIDENT-RUNBOOK.md](docs/DATABASE-INCIDENT-RUNBOOK.md)
+
+```bash
+npm run db:dev:migrate      # migrate dev + shadow guard
+npm run db:migrations:check # scan SQL destructif
+npm run db:prod:deploy      # migrate deploy (DATABASE_ENV requis)
+npm run db:seed             # catalogue référence uniquement
+```
+
+**Ne jamais** utiliser Neon production comme shadow DB / test DB / `migrate reset`.
 
 ## Migration auth (Backend 02)
 
@@ -33,15 +50,22 @@ npm run prisma:seed   # 8 catégories / 35 services (idempotent)
 
 Doc : **[docs/SERVICE-CATALOG-ELIGIBILITY.md](docs/SERVICE-CATALOG-ELIGIBILITY.md)**
 
-```bash
-# Dev (après review SQL)
-npm run prisma:migrate:deploy
+## Migration missions (Backend 04)
 
-# Prod : revue manuelle puis
-npm run prisma:migrate:deploy
+SQL : `prisma/migrations/20261002100000_missions_domain`  
+Tables missions / candidatures / vérifications / annulations / incidents / historique + séquence `mission_reference_seq`. **Additive only.**
+
+Doc : **[docs/MISSIONS-LIFECYCLE.md](docs/MISSIONS-LIFECYCLE.md)** — aucun endpoint public de confirmation de paiement (Backend 05).
+
+```bash
+# Dev — générer sur branche development + shadow
+npm run db:dev:migrate
+
+# Prod Render — appliquer seulement
+npm run db:prod:deploy
 ```
 
-**Ne jamais** `prisma migrate reset` sur Neon partagé.
+**Ne jamais** `prisma migrate reset` sur Neon partagé. Voir DATABASE-SAFETY.md.
 
 ## Dev
 
@@ -59,6 +83,8 @@ npm run dev   # :3001
 | Jobber | `POST /api/v1/jobbers/me/activate` + services / zones / eligibility |
 | Catalogue | `GET /api/v1/service-categories`, `GET /api/v1/services` |
 | Admin catalogue | `POST/PATCH /api/v1/admin/service-categories\|services…` |
+| Missions | `POST /api/v1/missions`, `…/publish`, `…/applications`, `…/verifications/*`, `…/incidents` |
+| Admin missions | `GET /api/v1/admin/missions\|incidents…` |
 | Docs | `/api/docs` (si `SWAGGER_ENABLED`) |
 
 ## Auth env

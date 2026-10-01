@@ -10,7 +10,9 @@ import { CATALOG_COUNTS } from '../src/common/constants/catalog-limits';
 const prisma = new PrismaClient();
 
 /**
- * Seed idempotent du catalogue KingJOBS (upsert par slug / code).
+ * Seed idempotent du catalogue KingJOBS (données de RÉFÉRENCE uniquement).
+ * Ne crée PAS d'utilisateurs / missions / fixtures démo.
+ * Préférer : npm run db:seed (passe par le guard DATABASE_ENV).
  */
 export async function seedCatalog(client: PrismaClient = prisma) {
   if (CATALOG_CATEGORY_SEEDS.length !== CATALOG_COUNTS.CATEGORIES) {
