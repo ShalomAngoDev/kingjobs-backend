@@ -12,6 +12,7 @@ import { RequestIdInterceptor } from './common/interceptors/request-id.intercept
 import { EmailModule } from './infrastructure/email/email.module';
 import { PrismaModule } from './infrastructure/prisma/prisma.module';
 import { SmsModule } from './infrastructure/sms/sms.module';
+import { AdminUsersModule } from './modules/admin-users/admin-users.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { CatalogModule } from './modules/catalog/catalog.module';
 import { EligibilityModule } from './modules/eligibility/eligibility.module';
@@ -50,6 +51,7 @@ import { UsersModule } from './modules/users/users.module';
     EligibilityModule,
     JobbersModule,
     MissionsModule,
+    AdminUsersModule,
     HealthModule,
     MetaModule,
   ],

@@ -3,20 +3,23 @@ import type { InMemoryPrisma } from './in-memory-prisma';
 
 export const ADULT_DOB = new Date('1995-05-10T00:00:00.000Z');
 
+/** Fixture utilisateur avec `id` garanti (évite Record<string, any> sans clé `id`). */
+export type FixtureUser = { id: string } & Record<string, unknown>;
+
 export type World = {
-  client: Record<string, any>;
-  jobber: Record<string, any>;
-  jobber2: Record<string, any>;
-  category: Record<string, any>;
-  service: Record<string, any>;
+  client: FixtureUser;
+  jobber: FixtureUser;
+  jobber2: FixtureUser;
+  category: { id: string } & Record<string, unknown>;
+  service: { id: string } & Record<string, unknown>;
 };
 
 export async function createUser(
   db: InMemoryPrisma,
-  overrides: Record<string, any> = {},
-) {
+  overrides: Record<string, unknown> = {},
+): Promise<FixtureUser> {
   const id = randomUUID();
-  return db.user.create({
+  const user = await db.user.create({
     data: {
       id,
       firstName: 'Prénom',
@@ -33,12 +36,13 @@ export async function createUser(
       ...overrides,
     },
   });
+  return user as FixtureUser;
 }
 
 export async function createJobber(
   db: InMemoryPrisma,
   serviceId: string,
-  overrides: Record<string, any> = {},
+  overrides: Record<string, unknown> = {},
 ) {
   const user = await createUser(db, overrides);
   const profile = await db.jobberProfile.create({
@@ -89,7 +93,13 @@ export async function seedWorld(db: InMemoryPrisma): Promise<World> {
     firstName: 'Julie',
     lastName: 'Deux',
   });
-  return { client, jobber, jobber2, category, service };
+  return {
+    client,
+    jobber,
+    jobber2,
+    category: category as { id: string } & Record<string, unknown>,
+    service: service as { id: string } & Record<string, unknown>,
+  };
 }
 
 let referenceCounter = 0;

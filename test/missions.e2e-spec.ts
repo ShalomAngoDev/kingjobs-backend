@@ -7,12 +7,17 @@ import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { MissionsService } from '../src/modules/missions/missions.service';
 import { e2eDb, MissionsE2eModule } from './missions-e2e.module';
-import { createUser, seedWorld, type World } from './support/mission-fixtures';
+import {
+  createUser,
+  seedWorld,
+  type FixtureUser,
+  type World,
+} from './support/mission-fixtures';
 
 describe('Missions API e2e (in-memory store)', () => {
   let app: INestApplication;
   let world: World;
-  let admin: Record<string, any>;
+  let admin: FixtureUser;
   let missionsService: MissionsService;
 
   const as = (user: { id: string }) => ({ 'x-test-user-id': user.id });

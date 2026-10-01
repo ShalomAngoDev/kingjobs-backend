@@ -16,7 +16,8 @@
     "start:prod": "node dist/main",
     "postinstall": "prisma generate",
     "lint": "eslint \"{src,test}/**/*.ts\" --fix",
-    "typecheck": "tsc -p tsconfig.build.json --noEmit",
+    "typecheck": "tsc -p tsconfig.build.json --noEmit && tsc --noEmit",
+    "typecheck:all": "tsc --noEmit",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:e2e": "jest --config ./test/jest-e2e.json --runInBand",
@@ -33,6 +34,7 @@
     "db:prod:deploy": "ts-node --transpile-only scripts/db-guard.ts migrate-deploy",
     "db:seed": "ts-node --transpile-only scripts/db-guard.ts seed-catalog",
     "db:diff": "ts-node --transpile-only scripts/db-guard.ts migrate-diff",
+    "admin:promote": "ts-node --transpile-only scripts/admin-promote.ts",
     "prisma:migrate:dev": "npm run db:dev:migrate --",
     "prisma:migrate:deploy": "npm run db:prod:deploy --",
     "prisma:seed": "npm run db:seed"
