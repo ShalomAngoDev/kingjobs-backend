@@ -1,7 +1,45 @@
 import { assertActionAllowed, buildSafetyContextFromEnv, DbSafetyError, redactDatabaseUrl } from '../src/common/db/db-safety';
 import { checkMigrations } from '../src/common/db/check-migrations';
 import { spawnSync } from 'node:child_process';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+
+/** Charge `.env` local sans écraser les variables déjà exportées dans le shell. */
+function loadDotEnvFile(): void {
+  const envPath = join(process.cwd(), '.env');
+  if (!existsSync(envPath)) return;
+  const content = readFileSync(envPath, 'utf8');
+  for (const rawLine of content.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith('#')) continue;
+    const eq = line.indexOf('=');
+    if (eq <= 0) continue;
+    const key = line.slice(0, eq).trim();
+    let value = line.slice(eq + 1).trim();
+    if (
+      (value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'"))
+    ) {
+      value = value.slice(1, -1);
+    }
+    if (
+      key === 'DATABASE_ENV' ||
+      key === 'DATABASE_URL' ||
+      key === 'DIRECT_URL' ||
+      key === 'SHADOW_DATABASE_URL' ||
+      key === 'TEST_DATABASE_URL' ||
+      key === 'KINGJOBS_PROD_DB_HOSTS' ||
+      key === 'ALLOW_DESTRUCTIVE_MIGRATION'
+    ) {
+      // Les scripts db:* privilégient le `.env` local (évite un export shell prod accidentel).
+      process.env[key] = value;
+    } else if (process.env[key] === undefined) {
+      process.env[key] = value;
+    }
+  }
+}
+
+loadDotEnvFile();
 
 type Mode =
   | 'migrate-dev'
