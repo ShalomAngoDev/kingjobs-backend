@@ -134,10 +134,38 @@ export class EnvironmentVariables {
   DEFAULT_PHONE_REGION?: string;
 }
 
+/** Défauts non-secrets (Render manuel sans Blueprint / vars oubliées). */
+function withEnvDefaults(
+  config: Record<string, unknown>,
+): Record<string, unknown> {
+  return {
+    ...config,
+    NODE_ENV: config.NODE_ENV ?? 'production',
+    PORT: config.PORT ?? 3001,
+    API_PREFIX: config.API_PREFIX ?? 'api',
+    API_VERSION: config.API_VERSION ?? '1',
+    SERVICE_NAME: config.SERVICE_NAME ?? 'kingjobs-api',
+    APP_VERSION: config.APP_VERSION ?? '0.1.0',
+    CORS_ORIGINS:
+      config.CORS_ORIGINS ??
+      'https://kingjobs.co,https://www.kingjobs.co',
+    CORS_ORIGIN_REGEXES:
+      config.CORS_ORIGIN_REGEXES ?? '^https://.*\\.vercel\\.app$',
+    TRUST_PROXY: config.TRUST_PROXY ?? 1,
+    SMS_PROVIDER: config.SMS_PROVIDER ?? 'none',
+    EMAIL_FROM: config.EMAIL_FROM ?? 'KingJOBS <noreply@kingjobs.co>',
+    APP_WEB_URL: config.APP_WEB_URL ?? 'https://kingjobs.co',
+  };
+}
+
 export function validateEnv(config: Record<string, unknown>) {
-  const validated = plainToInstance(EnvironmentVariables, config, {
-    enableImplicitConversion: true,
-  });
+  const validated = plainToInstance(
+    EnvironmentVariables,
+    withEnvDefaults(config),
+    {
+      enableImplicitConversion: true,
+    },
+  );
 
   const errors = validateSync(validated, {
     skipMissingProperties: false,

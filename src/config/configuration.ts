@@ -102,7 +102,7 @@ export default (): { app: AppConfig; auth: AuthConfig } => {
       otpTtlMinutes: Number(process.env.OTP_TTL_MINUTES ?? 5),
       otpMaxAttempts: Number(process.env.OTP_MAX_ATTEMPTS ?? 5),
       resendApiKey: process.env.RESEND_API_KEY?.trim() || null,
-      emailFrom: process.env.EMAIL_FROM ?? 'KingJOBS <hello@kingjobs.co>',
+      emailFrom: process.env.EMAIL_FROM ?? 'KingJOBS <noreply@kingjobs.co>',
       appWebUrl: process.env.APP_WEB_URL ?? 'http://localhost:3000',
       smsProvider: resolveSmsProvider(nodeEnv, process.env.SMS_PROVIDER),
       defaultPhoneRegion: process.env.DEFAULT_PHONE_REGION ?? 'BJ',

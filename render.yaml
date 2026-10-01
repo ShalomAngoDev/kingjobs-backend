@@ -54,7 +54,7 @@ services:
       - key: DEFAULT_PHONE_REGION
         value: BJ
       - key: EMAIL_FROM
-        value: KingJOBS <hello@kingjobs.co>
+        value: KingJOBS <noreply@kingjobs.co>
       - key: APP_WEB_URL
         value: https://kingjobs.co
       - key: CORS_ORIGINS

@@ -70,7 +70,7 @@ SQL concerné : `prisma/migrations/20261001140000_auth_identity`
 | `SWAGGER_ENABLED` | `false` |
 | `TRUST_PROXY` | `1` |
 | `RESEND_API_KEY` | (optionnel) |
-| `EMAIL_FROM` | `KingJOBS <hello@kingjobs.co>` |
+| `EMAIL_FROM` | `KingJOBS <noreply@kingjobs.co>` |
 
 `PORT` est injecté par Render — ne pas le forcer.
 
