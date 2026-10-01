@@ -40,11 +40,20 @@ Détail colonnes (sans données) :
 
 - `id` uuid PK default `gen_random_uuid()`
 - `first_name` text null
+- `last_name` text null *(préinscription qualifiée — ADD COLUMN)*
 - `email` text not null
 - `email_normalized` text not null unique
+- `phone` text null
+- `city` text null
+- `intent` text null (`LOOKING_FOR_MISSIONS` | `WANTS_TO_POST_MISSION`)
+- `category_id` text null
+- `service_id` text null
 - `status` text not null default `ACTIVE`
 - `source` text null
 - `created_at` timestamptz not null default `now()`
+
+Les colonnes ajoutées sont **NULL** pour rester compatibles avec les anciennes lignes (email+prénom seuls).
+Migration additive : `WebSite/docs/sql/waitlist-qualified-prelaunch.sql`.
 
 ### contact_messages
 
