@@ -11,6 +11,7 @@ import {
   AccountTokenType,
   LegalGuardianStatus,
   UserStatus,
+  type JobberStatus,
 } from '@prisma/client';
 import type { CountryCode } from 'libphonenumber-js';
 import {
@@ -531,26 +532,38 @@ export class AuthService {
     return { message: 'Compte fermé' };
   }
 
+  private serializeJobberProfile(profile: {
+    id: string;
+    status: JobberStatus;
+    headline: string | null;
+    bio: string | null;
+    yearsOfExperience: number | null;
+    createdAt: Date;
+    updatedAt: Date;
+  }) {
+    return {
+      id: profile.id,
+      status: profile.status,
+      headline: profile.headline,
+      bio: profile.bio,
+      yearsOfExperience: profile.yearsOfExperience,
+      createdAt: profile.createdAt.toISOString(),
+      updatedAt: profile.updatedAt.toISOString(),
+    };
+  }
+
   async activateJobber(userId: string) {
     const existing = await this.prisma.jobberProfile.findUnique({
       where: { userId },
     });
     if (existing) {
-      return {
-        id: existing.id,
-        status: existing.status,
-        bio: existing.bio,
-      };
+      return this.serializeJobberProfile(existing);
     }
 
     const created = await this.prisma.jobberProfile.create({
       data: { userId, status: 'DRAFT' },
     });
-    return {
-      id: created.id,
-      status: created.status,
-      bio: created.bio,
-    };
+    return this.serializeJobberProfile(created);
   }
 
   async getJobberMe(userId: string) {
@@ -560,16 +573,13 @@ export class AuthService {
     if (!profile) {
       throw new ForbiddenException('Profil Jobber non activé');
     }
-    return {
-      id: profile.id,
-      status: profile.status,
-      bio: profile.bio,
-      createdAt: profile.createdAt.toISOString(),
-      updatedAt: profile.updatedAt.toISOString(),
-    };
+    return this.serializeJobberProfile(profile);
   }
 
-  async updateJobberMe(userId: string, bio?: string) {
+  async updateJobberMe(
+    userId: string,
+    input: { bio?: string; headline?: string; yearsOfExperience?: number },
+  ) {
     const profile = await this.prisma.jobberProfile.findUnique({
       where: { userId },
     });
@@ -578,15 +588,16 @@ export class AuthService {
     }
     const updated = await this.prisma.jobberProfile.update({
       where: { userId },
-      data: { bio: bio === undefined ? undefined : bio.trim() || null },
+      data: {
+        bio: input.bio === undefined ? undefined : input.bio.trim() || null,
+        headline:
+          input.headline === undefined
+            ? undefined
+            : input.headline.trim() || null,
+        yearsOfExperience: input.yearsOfExperience,
+      },
     });
-    return {
-      id: updated.id,
-      status: updated.status,
-      bio: updated.bio,
-      createdAt: updated.createdAt.toISOString(),
-      updatedAt: updated.updatedAt.toISOString(),
-    };
+    return this.serializeJobberProfile(updated);
   }
 
   private async sendVerificationEmail(

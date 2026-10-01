@@ -21,6 +21,18 @@ npm run prisma:generate
 SQL : `prisma/migrations/20261001140000_auth_identity`  
 Crée uniquement les tables identité/auth. **Ne touche pas** aux tables pré-lancement.
 
+## Migration catalogue (Backend 03)
+
+SQL : `prisma/migrations/20261001160000_service_catalog_jobber_eligibility`  
+Catalogue, JobberService, zones, requirements — **additive only**.
+
+```bash
+npm run prisma:migrate:deploy
+npm run prisma:seed   # 8 catégories / 35 services (idempotent)
+```
+
+Doc : **[docs/SERVICE-CATALOG-ELIGIBILITY.md](docs/SERVICE-CATALOG-ELIGIBILITY.md)**
+
 ```bash
 # Dev (après review SQL)
 npm run prisma:migrate:deploy
@@ -29,7 +41,7 @@ npm run prisma:migrate:deploy
 npm run prisma:migrate:deploy
 ```
 
-**Non appliquée automatiquement sur Neon production** dans ce sprint.
+**Ne jamais** `prisma migrate reset` sur Neon partagé.
 
 ## Dev
 
@@ -44,7 +56,9 @@ npm run dev   # :3001
 | Health | `GET /api/v1/health` |
 | Auth | `POST /api/v1/auth/register\|login\|refresh\|logout…` |
 | Me | `GET/PATCH /api/v1/users/me` |
-| Jobber | `POST /api/v1/jobbers/me/activate` |
+| Jobber | `POST /api/v1/jobbers/me/activate` + services / zones / eligibility |
+| Catalogue | `GET /api/v1/service-categories`, `GET /api/v1/services` |
+| Admin catalogue | `POST/PATCH /api/v1/admin/service-categories\|services…` |
 | Docs | `/api/docs` (si `SWAGGER_ENABLED`) |
 
 ## Auth env

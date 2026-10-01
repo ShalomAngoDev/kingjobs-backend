@@ -88,7 +88,11 @@ describe('AuthService', () => {
       id: 'jp1',
       userId: 'u1',
       status: JobberStatus.DRAFT,
+      headline: null,
       bio: null,
+      yearsOfExperience: null,
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-01T00:00:00.000Z'),
     });
 
     const first = await service.activateJobber('u1');

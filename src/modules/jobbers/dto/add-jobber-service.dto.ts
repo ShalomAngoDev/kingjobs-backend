@@ -1,26 +1,27 @@
-import { ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsInt,
   IsOptional,
   IsString,
+  IsUUID,
   Max,
   MaxLength,
   Min,
 } from 'class-validator';
 import { CATALOG_LIMITS } from '../../../common/constants/catalog-limits';
 
-export class UpdateJobberMeDto {
-  @ApiPropertyOptional({ maxLength: CATALOG_LIMITS.MAX_BIO_LENGTH })
-  @IsOptional()
-  @IsString()
-  @MaxLength(CATALOG_LIMITS.MAX_BIO_LENGTH)
-  bio?: string;
+export class AddJobberServiceDto {
+  @ApiProperty({ format: 'uuid', description: 'Identifiant du service' })
+  @IsUUID()
+  serviceId!: string;
 
-  @ApiPropertyOptional({ maxLength: CATALOG_LIMITS.MAX_HEADLINE_LENGTH })
+  @ApiPropertyOptional({
+    maxLength: CATALOG_LIMITS.MAX_EXPERIENCE_DESCRIPTION_LENGTH,
+  })
   @IsOptional()
   @IsString()
-  @MaxLength(CATALOG_LIMITS.MAX_HEADLINE_LENGTH)
-  headline?: string;
+  @MaxLength(CATALOG_LIMITS.MAX_EXPERIENCE_DESCRIPTION_LENGTH)
+  experienceDescription?: string;
 
   @ApiPropertyOptional({
     minimum: 0,

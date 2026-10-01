@@ -147,8 +147,7 @@ function withEnvDefaults(
     SERVICE_NAME: config.SERVICE_NAME ?? 'kingjobs-api',
     APP_VERSION: config.APP_VERSION ?? '0.1.0',
     CORS_ORIGINS:
-      config.CORS_ORIGINS ??
-      'https://kingjobs.co,https://www.kingjobs.co',
+      config.CORS_ORIGINS ?? 'https://kingjobs.co,https://www.kingjobs.co',
     CORS_ORIGIN_REGEXES:
       config.CORS_ORIGIN_REGEXES ?? '^https://.*\\.vercel\\.app$',
     TRUST_PROXY: config.TRUST_PROXY ?? 1,

@@ -9,18 +9,15 @@ import {
 } from 'class-validator';
 import { CATALOG_LIMITS } from '../../../common/constants/catalog-limits';
 
-export class UpdateJobberMeDto {
-  @ApiPropertyOptional({ maxLength: CATALOG_LIMITS.MAX_BIO_LENGTH })
+/** Seuls ces champs sont modifiables ; le statut est calculé côté serveur. */
+export class UpdateJobberServiceDto {
+  @ApiPropertyOptional({
+    maxLength: CATALOG_LIMITS.MAX_EXPERIENCE_DESCRIPTION_LENGTH,
+  })
   @IsOptional()
   @IsString()
-  @MaxLength(CATALOG_LIMITS.MAX_BIO_LENGTH)
-  bio?: string;
-
-  @ApiPropertyOptional({ maxLength: CATALOG_LIMITS.MAX_HEADLINE_LENGTH })
-  @IsOptional()
-  @IsString()
-  @MaxLength(CATALOG_LIMITS.MAX_HEADLINE_LENGTH)
-  headline?: string;
+  @MaxLength(CATALOG_LIMITS.MAX_EXPERIENCE_DESCRIPTION_LENGTH)
+  experienceDescription?: string;
 
   @ApiPropertyOptional({
     minimum: 0,

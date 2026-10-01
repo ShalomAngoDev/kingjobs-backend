@@ -15,3 +15,5 @@ export const SENSITIVE_LOG_KEYS = [
   'identity',
   'document',
 ] as const;
+
+export * from './catalog-limits';

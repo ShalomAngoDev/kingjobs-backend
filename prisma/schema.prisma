@@ -1,5 +1,6 @@
 // KingJOBS API — Prisma schema
 // Backend 02: identité / auth / sessions
+// Backend 03: catalogue services, JobberService, zones, éligibilité
 // Tables pré-lancement (Next.js) : documentées dans docs/DATABASE.md — hors Migrate.
 
 generator client {
@@ -52,6 +53,22 @@ enum AccountTokenType {
   PASSWORD_RESET
 }
 
+enum JobberServiceStatus {
+  DRAFT
+  PENDING_ELIGIBILITY
+  ELIGIBLE
+  RESTRICTED
+  SUSPENDED
+}
+
+enum ServiceRequirementType {
+  MINIMUM_AGE
+  DOCUMENT
+  QUALIFICATION
+  MANUAL_APPROVAL
+  LEGAL_GUARDIAN_APPROVAL
+}
+
 model User {
   id                         String                     @id @default(uuid()) @db.Uuid
   firstName                  String                     @map("first_name") @db.VarChar(80)
@@ -97,17 +114,156 @@ model ClientProfile {
 }
 
 model JobberProfile {
-  id        String       @id @default(uuid()) @db.Uuid
-  userId    String       @unique @map("user_id") @db.Uuid
-  status    JobberStatus @default(DRAFT)
-  bio       String?      @db.VarChar(1000)
-  createdAt DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id                 String       @id @default(uuid()) @db.Uuid
+  userId             String       @unique @map("user_id") @db.Uuid
+  status             JobberStatus @default(DRAFT)
+  headline           String?      @db.VarChar(160)
+  bio                String?      @db.VarChar(1000)
+  yearsOfExperience  Int?         @map("years_of_experience")
+  createdAt          DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user         User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  services     JobberService[]
+  skills       JobberSkill[]
+  serviceAreas JobberServiceArea[]
 
   @@index([status])
   @@map("jobber_profiles")
+}
+
+model ServiceCategory {
+  id           String   @id @default(uuid()) @db.Uuid
+  name         String   @db.VarChar(120)
+  slug         String   @unique @db.VarChar(120)
+  description  String?  @db.VarChar(500)
+  displayOrder Int      @default(0) @map("display_order")
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  services Service[]
+
+  @@index([isActive, displayOrder])
+  @@map("service_categories")
+}
+
+model Service {
+  id               String   @id @default(uuid()) @db.Uuid
+  categoryId       String   @map("category_id") @db.Uuid
+  name             String   @db.VarChar(120)
+  slug             String   @unique @db.VarChar(120)
+  shortDescription String?  @map("short_description") @db.VarChar(500)
+  isActive         Boolean  @default(true) @map("is_active")
+  displayOrder     Int      @default(0) @map("display_order")
+  minimumAge       Int      @default(16) @map("minimum_age")
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  category     ServiceCategory      @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  requirements ServiceRequirement[]
+  jobberServices JobberService[]
+  skills       JobberSkill[]
+
+  @@index([categoryId, isActive, displayOrder])
+  @@index([isActive])
+  @@map("services")
+}
+
+model DocumentType {
+  id          String   @id @default(uuid()) @db.Uuid
+  code        String   @unique @db.VarChar(80)
+  name        String   @db.VarChar(160)
+  description String?  @db.VarChar(500)
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  requirements ServiceRequirement[]
+
+  @@index([isActive])
+  @@map("document_types")
+}
+
+model ServiceRequirement {
+  id             String                 @id @default(uuid()) @db.Uuid
+  serviceId      String                 @map("service_id") @db.Uuid
+  type           ServiceRequirementType
+  code           String                 @db.VarChar(80)
+  label          String                 @db.VarChar(200)
+  description    String?                @db.VarChar(500)
+  isRequired     Boolean                @default(true) @map("is_required")
+  isActive       Boolean                @default(true) @map("is_active")
+  documentTypeId String?                @map("document_type_id") @db.Uuid
+  configuration  Json?
+  createdAt      DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime               @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  service      Service       @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  documentType DocumentType? @relation(fields: [documentTypeId], references: [id], onDelete: SetNull)
+
+  @@unique([serviceId, code])
+  @@index([serviceId, isActive])
+  @@map("service_requirements")
+}
+
+model JobberService {
+  id                    String             @id @default(uuid()) @db.Uuid
+  jobberProfileId       String             @map("jobber_profile_id") @db.Uuid
+  serviceId             String             @map("service_id") @db.Uuid
+  experienceDescription String?            @map("experience_description") @db.VarChar(1000)
+  yearsOfExperience     Int?               @map("years_of_experience")
+  status                JobberServiceStatus @default(PENDING_ELIGIBILITY)
+  createdAt             DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime           @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  jobberProfile JobberProfile @relation(fields: [jobberProfileId], references: [id], onDelete: Cascade)
+  service       Service       @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+
+  @@unique([jobberProfileId, serviceId])
+  @@index([jobberProfileId, status])
+  @@index([serviceId])
+  @@map("jobber_services")
+}
+
+model JobberSkill {
+  id              String   @id @default(uuid()) @db.Uuid
+  jobberProfileId String   @map("jobber_profile_id") @db.Uuid
+  serviceId       String?  @map("service_id") @db.Uuid
+  /// 'profile' ou UUID service — clé technique pour unicité (évite NULL dans unique)
+  scopeKey        String   @default("profile") @map("scope_key") @db.VarChar(40)
+  name            String   @db.VarChar(120)
+  nameNormalized  String   @map("name_normalized") @db.VarChar(120)
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  jobberProfile JobberProfile @relation(fields: [jobberProfileId], references: [id], onDelete: Cascade)
+  service       Service?      @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+
+  @@unique([jobberProfileId, nameNormalized, scopeKey])
+  @@index([jobberProfileId])
+  @@map("jobber_skills")
+}
+
+model JobberServiceArea {
+  id                 String   @id @default(uuid()) @db.Uuid
+  jobberProfileId    String   @map("jobber_profile_id") @db.Uuid
+  countryCode        String   @default("BJ") @map("country_code") @db.Char(2)
+  administrativeArea String?  @map("administrative_area") @db.VarChar(120)
+  city               String   @db.VarChar(120)
+  district           String?  @db.VarChar(120)
+  latitude           Decimal? @db.Decimal(9, 6)
+  longitude          Decimal? @db.Decimal(9, 6)
+  radiusKm           Decimal? @map("radius_km") @db.Decimal(6, 2)
+  isActive           Boolean  @default(true) @map("is_active")
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  jobberProfile JobberProfile @relation(fields: [jobberProfileId], references: [id], onDelete: Cascade)
+
+  @@index([jobberProfileId, isActive])
+  @@index([countryCode, city])
+  @@map("jobber_service_areas")
 }
 
 model Session {

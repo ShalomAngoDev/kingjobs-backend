@@ -13,6 +13,8 @@ import { EmailModule } from './infrastructure/email/email.module';
 import { PrismaModule } from './infrastructure/prisma/prisma.module';
 import { SmsModule } from './infrastructure/sms/sms.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { CatalogModule } from './modules/catalog/catalog.module';
+import { EligibilityModule } from './modules/eligibility/eligibility.module';
 import { HealthModule } from './modules/health/health.module';
 import { JobbersModule } from './modules/jobbers/jobbers.module';
 import { MetaModule } from './modules/meta/meta.module';
@@ -43,6 +45,8 @@ import { UsersModule } from './modules/users/users.module';
     SmsModule,
     AuthModule,
     UsersModule,
+    CatalogModule,
+    EligibilityModule,
     JobbersModule,
     HealthModule,
     MetaModule,

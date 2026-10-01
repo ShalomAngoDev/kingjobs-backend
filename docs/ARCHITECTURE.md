@@ -24,11 +24,16 @@ src/
   modules/           modules métier HTTP (health, puis auth, users…)
 ```
 
+## Modules Nest (état)
+
+- `health`, `meta` — Backend 01
+- `auth`, `users`, `jobbers` — Backend 02 (+ extensions profil Backend 03)
+- `catalog`, `eligibility` — Backend 03 (catalogue, exigences, éligibilité)
+
 ## Modules futurs (non créés maintenant)
 
-auth, users, clients, jobbers, services, missions, matching,
-payments, payouts, documents, reviews, disputes, notifications,
-admin, audit, support.
+missions, matching, payments, payouts, documents (upload), reviews, disputes,
+notifications, admin élargi, audit, support.
 
 Ils s'ajouteront comme modules Nest sans refactor massif grâce à :
 
