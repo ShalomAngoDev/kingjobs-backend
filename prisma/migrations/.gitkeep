@@ -1,0 +1,2 @@
+# Les migrations Prisma NestJS commenceront après baseline des tables pré-lancement.
+# Voir docs/DATABASE.md — ne pas créer de migration initiale qui recrée ces tables.

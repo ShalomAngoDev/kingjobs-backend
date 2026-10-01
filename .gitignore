@@ -1,0 +1,27 @@
+# Dependencies
+node_modules/
+dist/
+coverage/
+generated/
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Logs / OS
+*.log
+.DS_Store
+tmp/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Prisma
+prisma/*.db
+prisma/*.db-journal
+
+# Test
+.nyc_output/

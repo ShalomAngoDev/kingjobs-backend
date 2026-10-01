@@ -1,0 +1,87 @@
+// KingJOBS API — Prisma schema (Backend 01)
+//
+// IMPORTANT:
+// - Les tables public pré-lancement existent déjà (créées hors Prisma Migrate).
+// - Ce schéma les mappe en lecture pour coexistence / introspection documentaire.
+// - AUCUNE migration Prisma ne doit tenter de les recréer.
+// - Les futures tables métier NestJS seront ajoutées via Prisma Migrate + baseline.
+// Voir docs/DATABASE.md
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+/// Pré-lancement — ownership actuel : APIs Next.js (WebSite). PII.
+model WaitlistSubscriber {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  firstName       String?  @map("first_name")
+  email           String
+  emailNormalized String   @unique(map: "waitlist_subscribers_email_normalized_uidx") @map("email_normalized")
+  status          String   @default("ACTIVE")
+  source          String?
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@map("waitlist_subscribers")
+}
+
+/// Pré-lancement — ownership actuel : APIs Next.js (WebSite). PII.
+model ContactMessage {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name      String
+  email     String
+  subject   String
+  message   String
+  status    String   @default("NEW")
+  source    String   @default("website")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([createdAt(sort: Desc)], map: "contact_messages_created_at_idx")
+  @@map("contact_messages")
+}
+
+/// Pré-lancement — ownership actuel : APIs Next.js (WebSite). PII.
+model PartnershipRequest {
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  firstName         String   @map("first_name")
+  lastName          String   @map("last_name")
+  email             String
+  phone             String?
+  organization      String
+  roleTitle         String?  @map("role_title")
+  collaborationType String   @map("collaboration_type")
+  message           String
+  status            String   @default("NEW")
+  source            String   @default("website")
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([createdAt(sort: Desc)], map: "partnership_requests_created_at_idx")
+  @@map("partnership_requests")
+}
+
+/// Pré-lancement — ownership actuel : APIs Next.js (WebSite). PII.
+model PrelaunchMissionRequest {
+  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  firstName        String   @map("first_name")
+  lastName         String   @map("last_name")
+  phone            String
+  email            String
+  customerType     String   @map("customer_type")
+  organizationName String?  @map("organization_name")
+  serviceId        String?  @map("service_id")
+  otherService     String?  @map("other_service")
+  description      String
+  cityOrArea       String?  @map("city_or_area")
+  desiredDate      String?  @map("desired_date")
+  status           String   @default("NEW")
+  source           String   @default("website")
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([createdAt(sort: Desc)], map: "prelaunch_mission_requests_created_at_idx")
+  @@map("prelaunch_mission_requests")
+}
