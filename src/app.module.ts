@@ -5,11 +5,18 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import configuration, { type AppConfig } from './config/configuration';
 import { validateEnv } from './config/env.validation';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
+import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
+import { RolesGuard } from './common/guards/roles.guard';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 import { RequestIdInterceptor } from './common/interceptors/request-id.interceptor';
+import { EmailModule } from './infrastructure/email/email.module';
 import { PrismaModule } from './infrastructure/prisma/prisma.module';
+import { SmsModule } from './infrastructure/sms/sms.module';
+import { AuthModule } from './modules/auth/auth.module';
 import { HealthModule } from './modules/health/health.module';
+import { JobbersModule } from './modules/jobbers/jobbers.module';
 import { MetaModule } from './modules/meta/meta.module';
+import { UsersModule } from './modules/users/users.module';
 
 @Module({
   imports: [
@@ -32,6 +39,11 @@ import { MetaModule } from './modules/meta/meta.module';
       },
     }),
     PrismaModule,
+    EmailModule,
+    SmsModule,
+    AuthModule,
+    UsersModule,
+    JobbersModule,
     HealthModule,
     MetaModule,
   ],
@@ -40,6 +52,8 @@ import { MetaModule } from './modules/meta/meta.module';
     { provide: APP_INTERCEPTOR, useClass: RequestIdInterceptor },
     { provide: APP_INTERCEPTOR, useClass: LoggingInterceptor },
     { provide: APP_GUARD, useClass: ThrottlerGuard },
+    { provide: APP_GUARD, useClass: JwtAuthGuard },
+    { provide: APP_GUARD, useClass: RolesGuard },
   ],
 })
 export class AppModule {}

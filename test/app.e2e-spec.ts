@@ -5,12 +5,12 @@ import {
 } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import request from 'supertest';
-import { AppModule } from '../src/app.module';
 import { GlobalExceptionFilter } from '../src/common/filters/global-exception.filter';
 import { RequestIdInterceptor } from '../src/common/interceptors/request-id.interceptor';
 import { PrismaService } from '../src/infrastructure/prisma/prisma.service';
+import { E2eAppModule } from './e2e-app.module';
 
-describe('API e2e (Backend 01)', () => {
+describe('API e2e (health / meta)', () => {
   let app: INestApplication;
 
   const ping = jest.fn().mockResolvedValue(true);
@@ -27,19 +27,18 @@ describe('API e2e (Backend 01)', () => {
     process.env.NODE_ENV = 'test';
     process.env.PORT = '3001';
     process.env.DATABASE_URL =
-      process.env.DATABASE_URL ||
       'postgresql://postgres:postgres@127.0.0.1:5432/kingjobs_test?schema=public';
-    process.env.DIRECT_URL = process.env.DIRECT_URL || process.env.DATABASE_URL;
+    process.env.DIRECT_URL = process.env.DATABASE_URL;
     process.env.API_PREFIX = 'api';
     process.env.API_VERSION = '1';
     process.env.SERVICE_NAME = 'kingjobs-api';
     process.env.CORS_ORIGINS = 'http://localhost:3000';
     process.env.SWAGGER_ENABLED = 'false';
-    process.env.THROTTLE_TTL_MS = '60000';
-    process.env.THROTTLE_LIMIT = '100';
+    process.env.JWT_ACCESS_SECRET = 'test-jwt-secret-at-least-32-chars!!';
+    process.env.SMS_PROVIDER = 'console';
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
-      imports: [AppModule],
+      imports: [E2eAppModule],
     })
       .overrideProvider(PrismaService)
       .useValue(prismaMock)
@@ -71,7 +70,6 @@ describe('API e2e (Backend 01)', () => {
     const response = await request(app.getHttpServer())
       .get('/api/v1')
       .expect(200);
-
     expect(response.body).toMatchObject({
       name: 'KingJOBS API',
       version: 'v1',
@@ -83,7 +81,6 @@ describe('API e2e (Backend 01)', () => {
     const response = await request(app.getHttpServer())
       .get('/api/v1/health/live')
       .expect(200);
-
     expect(response.body.status).toBe('ok');
     expect(response.headers['x-request-id']).toBeDefined();
   });
@@ -92,7 +89,6 @@ describe('API e2e (Backend 01)', () => {
     const response = await request(app.getHttpServer())
       .get('/api/v1/health')
       .expect(200);
-
     expect(response.body).toMatchObject({
       status: 'ok',
       database: 'up',
@@ -102,11 +98,9 @@ describe('API e2e (Backend 01)', () => {
 
   it('GET /api/v1/health returns 503 when database is down', async () => {
     ping.mockRejectedValueOnce(new Error('down'));
-
     const response = await request(app.getHttpServer())
       .get('/api/v1/health')
       .expect(503);
-
     expect(response.body.database).toBe('down');
     expect(response.body.status).toBe('degraded');
   });

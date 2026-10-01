@@ -1,11 +1,6 @@
-// KingJOBS API — Prisma schema (Backend 01)
-//
-// IMPORTANT:
-// - Les tables public pré-lancement existent déjà (créées hors Prisma Migrate).
-// - Ce schéma les mappe en lecture pour coexistence / introspection documentaire.
-// - AUCUNE migration Prisma ne doit tenter de les recréer.
-// - Les futures tables métier NestJS seront ajoutées via Prisma Migrate + baseline.
-// Voir docs/DATABASE.md
+// KingJOBS API — Prisma schema
+// Backend 02: identité / auth / sessions
+// Tables pré-lancement (Next.js) : documentées dans docs/DATABASE.md — hors Migrate.
 
 generator client {
   provider = "prisma-client-js"
@@ -17,71 +12,167 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
-/// Pré-lancement — ownership actuel : APIs Next.js (WebSite). PII.
-model WaitlistSubscriber {
-  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  firstName       String?  @map("first_name")
-  email           String
-  emailNormalized String   @unique(map: "waitlist_subscribers_email_normalized_uidx") @map("email_normalized")
-  status          String   @default("ACTIVE")
-  source          String?
-  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-
-  @@map("waitlist_subscribers")
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  CLOSED
 }
 
-/// Pré-lancement — ownership actuel : APIs Next.js (WebSite). PII.
-model ContactMessage {
-  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  name      String
-  email     String
-  subject   String
-  message   String
-  status    String   @default("NEW")
-  source    String   @default("website")
+enum UserRole {
+  USER
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum JobberStatus {
+  DRAFT
+  PENDING_VERIFICATION
+  ACTIVE
+  SUSPENDED
+  REJECTED
+}
+
+enum IdentityVerificationStatus {
+  UNVERIFIED
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+enum LegalGuardianStatus {
+  NOT_REQUIRED
+  REQUIRED
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum AccountTokenType {
+  EMAIL_VERIFICATION
+  PASSWORD_RESET
+}
+
+model User {
+  id                         String                     @id @default(uuid()) @db.Uuid
+  firstName                  String                     @map("first_name") @db.VarChar(80)
+  lastName                   String                     @map("last_name") @db.VarChar(80)
+  email                      String                     @db.VarChar(320)
+  emailNormalized            String                     @unique @map("email_normalized") @db.VarChar(320)
+  phone                      String                     @unique @db.VarChar(20)
+  passwordHash               String                     @map("password_hash")
+  dateOfBirth                DateTime                   @map("date_of_birth") @db.Date
+  emailVerifiedAt            DateTime?                  @map("email_verified_at") @db.Timestamptz(6)
+  phoneVerifiedAt            DateTime?                  @map("phone_verified_at") @db.Timestamptz(6)
+  status                     UserStatus                 @default(ACTIVE)
+  role                       UserRole                   @default(USER)
+  identityVerificationStatus IdentityVerificationStatus @default(UNVERIFIED) @map("identity_verification_status")
+  legalGuardianStatus        LegalGuardianStatus        @default(NOT_REQUIRED) @map("legal_guardian_status")
+  suspendedAt                DateTime?                  @map("suspended_at") @db.Timestamptz(6)
+  suspensionReason           String?                    @map("suspension_reason") @db.VarChar(500)
+  closedAt                   DateTime?                  @map("closed_at") @db.Timestamptz(6)
+  createdAt                  DateTime                   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                  DateTime                   @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  clientProfile    ClientProfile?
+  jobberProfile    JobberProfile?
+  sessions         Session[]
+  accountTokens    AccountToken[]
+  phoneOtps        PhoneOtp[]
+  termsAcceptances TermsAcceptance[]
+
+  @@index([status])
+  @@map("users")
+}
+
+/// Créé à la demande (pas à l'inscription). Un User peut utiliser le Client sans profil tant qu'aucune donnée Client spécifique n'existe.
+model ClientProfile {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @unique @map("user_id") @db.Uuid
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  @@index([createdAt(sort: Desc)], map: "contact_messages_created_at_idx")
-  @@map("contact_messages")
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("client_profiles")
 }
 
-/// Pré-lancement — ownership actuel : APIs Next.js (WebSite). PII.
-model PartnershipRequest {
-  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  firstName         String   @map("first_name")
-  lastName          String   @map("last_name")
-  email             String
-  phone             String?
-  organization      String
-  roleTitle         String?  @map("role_title")
-  collaborationType String   @map("collaboration_type")
-  message           String
-  status            String   @default("NEW")
-  source            String   @default("website")
-  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+model JobberProfile {
+  id        String       @id @default(uuid()) @db.Uuid
+  userId    String       @unique @map("user_id") @db.Uuid
+  status    JobberStatus @default(DRAFT)
+  bio       String?      @db.VarChar(1000)
+  createdAt DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  @@index([createdAt(sort: Desc)], map: "partnership_requests_created_at_idx")
-  @@map("partnership_requests")
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@map("jobber_profiles")
 }
 
-/// Pré-lancement — ownership actuel : APIs Next.js (WebSite). PII.
-model PrelaunchMissionRequest {
-  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  firstName        String   @map("first_name")
-  lastName         String   @map("last_name")
-  phone            String
-  email            String
-  customerType     String   @map("customer_type")
-  organizationName String?  @map("organization_name")
-  serviceId        String?  @map("service_id")
-  otherService     String?  @map("other_service")
-  description      String
-  cityOrArea       String?  @map("city_or_area")
-  desiredDate      String?  @map("desired_date")
-  status           String   @default("NEW")
-  source           String   @default("website")
-  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+model Session {
+  id               String    @id @default(uuid()) @db.Uuid
+  userId           String    @map("user_id") @db.Uuid
+  refreshTokenHash String    @unique @map("refresh_token_hash")
+  tokenFamily      String    @map("token_family") @db.Uuid
+  expiresAt        DateTime  @map("expires_at") @db.Timestamptz(6)
+  revokedAt        DateTime? @map("revoked_at") @db.Timestamptz(6)
+  replacedById     String?   @map("replaced_by_id") @db.Uuid
+  userAgent        String?   @map("user_agent") @db.VarChar(512)
+  lastUsedAt       DateTime  @default(now()) @map("last_used_at") @db.Timestamptz(6)
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  @@index([createdAt(sort: Desc)], map: "prelaunch_mission_requests_created_at_idx")
-  @@map("prelaunch_mission_requests")
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([tokenFamily])
+  @@map("sessions")
+}
+
+model AccountToken {
+  id        String           @id @default(uuid()) @db.Uuid
+  userId    String           @map("user_id") @db.Uuid
+  type      AccountTokenType
+  tokenHash String           @unique @map("token_hash")
+  expiresAt DateTime         @map("expires_at") @db.Timestamptz(6)
+  usedAt    DateTime?        @map("used_at") @db.Timestamptz(6)
+  createdAt DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, type])
+  @@map("account_tokens")
+}
+
+model PhoneOtp {
+  id          String    @id @default(uuid()) @db.Uuid
+  userId      String    @map("user_id") @db.Uuid
+  phone       String    @db.VarChar(20)
+  codeHash    String    @map("code_hash")
+  attempts    Int       @default(0)
+  maxAttempts Int       @default(5) @map("max_attempts")
+  expiresAt   DateTime  @map("expires_at") @db.Timestamptz(6)
+  consumedAt  DateTime? @map("consumed_at") @db.Timestamptz(6)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([phone, createdAt(sort: Desc)])
+  @@map("phone_otps")
+}
+
+model TermsAcceptance {
+  id                   String   @id @default(uuid()) @db.Uuid
+  userId               String   @map("user_id") @db.Uuid
+  termsVersion         String   @map("terms_version") @db.VarChar(20)
+  privacyPolicyVersion String   @map("privacy_policy_version") @db.VarChar(20)
+  acceptedAt           DateTime @default(now()) @map("accepted_at") @db.Timestamptz(6)
+  createdAt            DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("terms_acceptances")
 }

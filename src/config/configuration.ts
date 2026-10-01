@@ -6,6 +6,7 @@ export type AppConfig = {
   serviceName: string;
   appVersion: string;
   corsOrigins: string[];
+  corsOriginRegexes: string[];
   bodyLimit: string;
   trustProxy: number;
   swaggerEnabled: boolean;
@@ -16,19 +17,51 @@ export type AppConfig = {
   directUrl: string;
 };
 
+export type AuthConfig = {
+  jwtAccessSecret: string;
+  jwtAccessTtl: string;
+  refreshTokenTtlDays: number;
+  emailVerifyTtlHours: number;
+  passwordResetTtlMinutes: number;
+  otpTtlMinutes: number;
+  otpMaxAttempts: number;
+  resendApiKey: string | null;
+  emailFrom: string;
+  appWebUrl: string;
+  smsProvider: 'console' | 'none';
+  defaultPhoneRegion: string;
+};
+
 function parseBoolean(value: string | undefined, fallback: boolean): boolean {
   if (value === undefined || value === '') return fallback;
   return ['1', 'true', 'yes', 'on'].includes(value.toLowerCase());
 }
 
-function parseOrigins(raw: string): string[] {
-  return raw
+function parseList(raw: string | undefined, fallback = ''): string[] {
+  return (raw ?? fallback)
     .split(',')
-    .map((origin) => origin.trim())
+    .map((item) => item.trim())
     .filter(Boolean);
 }
 
-export default (): { app: AppConfig } => {
+function parseOrigins(raw: string): string[] {
+  return parseList(raw);
+}
+
+function resolveSmsProvider(
+  nodeEnv: AppConfig['nodeEnv'],
+  raw: string | undefined,
+): AuthConfig['smsProvider'] {
+  if (raw === 'console' || raw === 'none') {
+    return raw;
+  }
+  if (nodeEnv === 'production') {
+    return 'none';
+  }
+  return 'console';
+}
+
+export default (): { app: AppConfig; auth: AuthConfig } => {
   const nodeEnv = (process.env.NODE_ENV ??
     'development') as AppConfig['nodeEnv'];
   const swaggerDefault = nodeEnv !== 'production';
@@ -45,6 +78,10 @@ export default (): { app: AppConfig } => {
         process.env.CORS_ORIGINS ??
           'http://localhost:3000,https://kingjobs.co,https://www.kingjobs.co',
       ),
+      corsOriginRegexes: parseList(
+        process.env.CORS_ORIGIN_REGEXES,
+        '^https://.*\\.vercel\\.app$',
+      ),
       bodyLimit: process.env.BODY_LIMIT ?? '1mb',
       trustProxy: Number(process.env.TRUST_PROXY ?? 1),
       swaggerEnabled: parseBoolean(process.env.SWAGGER_ENABLED, swaggerDefault),
@@ -53,6 +90,22 @@ export default (): { app: AppConfig } => {
       gitSha: process.env.GIT_SHA?.trim() || null,
       databaseUrl: process.env.DATABASE_URL ?? '',
       directUrl: process.env.DIRECT_URL ?? '',
+    },
+    auth: {
+      jwtAccessSecret: process.env.JWT_ACCESS_SECRET ?? '',
+      jwtAccessTtl: process.env.JWT_ACCESS_TTL ?? '15m',
+      refreshTokenTtlDays: Number(process.env.REFRESH_TOKEN_TTL_DAYS ?? 30),
+      emailVerifyTtlHours: Number(process.env.EMAIL_VERIFY_TTL_HOURS ?? 24),
+      passwordResetTtlMinutes: Number(
+        process.env.PASSWORD_RESET_TTL_MINUTES ?? 30,
+      ),
+      otpTtlMinutes: Number(process.env.OTP_TTL_MINUTES ?? 5),
+      otpMaxAttempts: Number(process.env.OTP_MAX_ATTEMPTS ?? 5),
+      resendApiKey: process.env.RESEND_API_KEY?.trim() || null,
+      emailFrom: process.env.EMAIL_FROM ?? 'KingJOBS <hello@kingjobs.co>',
+      appWebUrl: process.env.APP_WEB_URL ?? 'http://localhost:3000',
+      smsProvider: resolveSmsProvider(nodeEnv, process.env.SMS_PROVIDER),
+      defaultPhoneRegion: process.env.DEFAULT_PHONE_REGION ?? 'BJ',
     },
   };
 };

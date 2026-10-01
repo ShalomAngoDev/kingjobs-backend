@@ -2,9 +2,11 @@ import { Controller, Get } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { SkipThrottle } from '@nestjs/throttler';
+import { Public } from '../../common/decorators/public.decorator';
 import type { AppConfig } from '../../config/configuration';
 
 @ApiTags('meta')
+@Public()
 @SkipThrottle()
 @Controller({ path: '', version: '1' })
 export class MetaController {

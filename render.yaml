@@ -1,0 +1,74 @@
+# Exported from https://render.com/docs/blueprint-spec
+# Connectez le repo git@github.com:ShalomAngoDev/kingjobs-backend.git
+# Région EU proche de Neon (aws-eu-west-2 / Londres) → Frankfurt
+
+services:
+  - type: web
+    name: kingjobs-api
+    runtime: node
+    plan: starter
+    region: frankfurt
+    branch: main
+    autoDeploy: true
+    healthCheckPath: /api/v1/health/live
+    buildCommand: npm ci && npm run build
+    startCommand: npm run start:prod
+    preDeployCommand: npm run prisma:migrate:deploy
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: "20.19.0"
+      - key: API_PREFIX
+        value: api
+      - key: API_VERSION
+        value: "1"
+      - key: SERVICE_NAME
+        value: kingjobs-api
+      - key: APP_VERSION
+        value: "0.1.0"
+      - key: TRUST_PROXY
+        value: "1"
+      - key: BODY_LIMIT
+        value: 1mb
+      - key: SWAGGER_ENABLED
+        value: "false"
+      - key: THROTTLE_TTL_MS
+        value: "60000"
+      - key: THROTTLE_LIMIT
+        value: "100"
+      - key: JWT_ACCESS_TTL
+        value: 15m
+      - key: REFRESH_TOKEN_TTL_DAYS
+        value: "30"
+      - key: EMAIL_VERIFY_TTL_HOURS
+        value: "24"
+      - key: PASSWORD_RESET_TTL_MINUTES
+        value: "30"
+      - key: OTP_TTL_MINUTES
+        value: "5"
+      - key: OTP_MAX_ATTEMPTS
+        value: "5"
+      - key: SMS_PROVIDER
+        value: none
+      - key: DEFAULT_PHONE_REGION
+        value: BJ
+      - key: EMAIL_FROM
+        value: KingJOBS <hello@kingjobs.co>
+      - key: APP_WEB_URL
+        value: https://kingjobs.co
+      - key: CORS_ORIGINS
+        value: https://kingjobs.co,https://www.kingjobs.co,http://localhost:3000
+      - key: CORS_ORIGIN_REGEXES
+        value: ^https://.*\.vercel\.app$
+      # Secrets / Neon — à renseigner dans le dashboard Render (sync: false)
+      - key: DATABASE_URL
+        sync: false
+      - key: DIRECT_URL
+        sync: false
+      - key: JWT_ACCESS_SECRET
+        generateValue: true
+      - key: RESEND_API_KEY
+        sync: false
+      - key: GIT_SHA
+        sync: false

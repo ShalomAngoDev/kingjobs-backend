@@ -12,8 +12,11 @@
 | Zone | Ownership | Notes |
 | --- | --- | --- |
 | Tables `public` pré-lancement | APIs Next.js (`WebSite`) | Écriture active en production |
-| Schéma `neon_auth.*` | Neon Auth (plateforme) | Hors scope Backend 01 — ne pas modifier |
-| Futures tables métier | NestJS + Prisma Migrate | À partir des prochains sprints |
+| Schéma `neon_auth.*` | Neon Auth (plateforme) | Hors scope — ne pas modifier |
+| Tables auth Nest (`users`, `sessions`, …) | NestJS + Prisma Migrate | Migration `20261001140000_auth_identity` |
+| Futures tables métier | NestJS + Prisma Migrate | Prochains sprints |
+
+Les modèles pré-lancement ne sont **plus** dans `schema.prisma` (évite toute migration qui les recrée). Ils restent documentés ci-dessous.
 
 ## Tables `public` détectées (noms)
 

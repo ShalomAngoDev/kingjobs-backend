@@ -8,6 +8,7 @@ import {
   IsString,
   Max,
   Min,
+  MinLength,
   validateSync,
 } from 'class-validator';
 
@@ -50,6 +51,10 @@ export class EnvironmentVariables {
 
   @IsOptional()
   @IsString()
+  CORS_ORIGIN_REGEXES?: string;
+
+  @IsOptional()
+  @IsString()
   BODY_LIMIT?: string;
 
   @IsOptional()
@@ -74,6 +79,59 @@ export class EnvironmentVariables {
   @IsOptional()
   @IsString()
   GIT_SHA?: string;
+
+  @IsString()
+  @MinLength(32)
+  JWT_ACCESS_SECRET!: string;
+
+  @IsOptional()
+  @IsString()
+  JWT_ACCESS_TTL?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  REFRESH_TOKEN_TTL_DAYS?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  EMAIL_VERIFY_TTL_HOURS?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  PASSWORD_RESET_TTL_MINUTES?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  OTP_TTL_MINUTES?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  OTP_MAX_ATTEMPTS?: number;
+
+  @IsOptional()
+  @IsString()
+  RESEND_API_KEY?: string;
+
+  @IsOptional()
+  @IsString()
+  EMAIL_FROM?: string;
+
+  @IsOptional()
+  @IsString()
+  APP_WEB_URL?: string;
+
+  @IsOptional()
+  @IsIn(['console', 'none'])
+  SMS_PROVIDER?: 'console' | 'none';
+
+  @IsOptional()
+  @IsString()
+  DEFAULT_PHONE_REGION?: string;
 }
 
 export function validateEnv(config: Record<string, unknown>) {

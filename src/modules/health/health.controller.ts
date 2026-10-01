@@ -1,9 +1,11 @@
 import { Controller, Get, HttpCode, HttpStatus } from '@nestjs/common';
 import { ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { SkipThrottle } from '@nestjs/throttler';
+import { Public } from '../../common/decorators/public.decorator';
 import { HealthService } from './health.service';
 
 @ApiTags('health')
+@Public()
 @SkipThrottle()
 @Controller({ path: 'health', version: '1' })
 export class HealthController {
