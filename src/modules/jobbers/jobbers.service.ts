@@ -11,6 +11,12 @@ import type {
   JobberSkill,
   Prisma,
 } from '@prisma/client';
+import {
+  IdentityVerificationStatus,
+  JobberStatus,
+  MissionAssignmentStatus,
+  MissionStatus,
+} from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { CATALOG_LIMITS } from '../../common/constants/catalog-limits';
 import { isUniqueViolation } from '../../common/utils/prisma-errors';
@@ -20,6 +26,8 @@ import {
   type EligibilityResult,
 } from '../eligibility/jobber-eligibility.service';
 import { JobberProfileCompletionService } from '../eligibility/jobber-profile-completion.service';
+import { JobberServiceEligibilitySync } from '../eligibility/jobber-service-eligibility-sync.service';
+import { loadApprovedProfilePhotoIds } from '../verifications/profile-photo';
 import type { AddJobberServiceDto } from './dto/add-jobber-service.dto';
 import type { CreateJobberSkillDto } from './dto/create-jobber-skill.dto';
 import type { CreateServiceAreaDto } from './dto/create-service-area.dto';
@@ -56,6 +64,7 @@ export class JobbersService {
     private readonly prisma: PrismaService,
     private readonly eligibilityService: JobberEligibilityService,
     private readonly completionService: JobberProfileCompletionService,
+    private readonly eligibilitySync: JobberServiceEligibilitySync,
   ) {}
 
   async requireJobberProfile(userId: string): Promise<JobberProfile> {
@@ -136,12 +145,15 @@ export class JobbersService {
       where: { serviceId: service.id, isActive: true },
     });
     const user = await this.loadEligibilityUser(userId);
+    const approvedDocumentTypeIds =
+      await this.eligibilitySync.loadApprovedDocumentTypeIds(userId);
 
     const result = this.eligibilityService.evaluate({
       user,
       jobber: { status: profile.status },
       service,
       requirements,
+      approvedDocumentTypeIds,
     });
 
     try {
@@ -180,11 +192,14 @@ export class JobbersService {
       where: { serviceId, isActive: true },
     });
     const user = await this.loadEligibilityUser(userId);
+    const approvedDocumentTypeIds =
+      await this.eligibilitySync.loadApprovedDocumentTypeIds(userId);
     const result = this.eligibilityService.evaluate({
       user,
       jobber: { status: profile.status },
       service: existing.service,
       requirements,
+      approvedDocumentTypeIds,
     });
 
     const updated = await this.prisma.jobberService.update({
@@ -377,11 +392,112 @@ export class JobbersService {
     return { message: 'Compétence supprimée' };
   }
 
+  // ---------- Formations & expériences ----------
+
+  async listEducations(userId: string) {
+    const profile = await this.requireJobberProfile(userId);
+    const rows = await this.prisma.jobberEducation.findMany({
+      where: { jobberProfileId: profile.id },
+      orderBy: { createdAt: 'asc' },
+    });
+    return rows.map((row) => this.serializeEducation(row));
+  }
+
+  async addEducation(
+    userId: string,
+    dto: {
+      title: string;
+      institution?: string;
+      field?: string;
+      startedOn?: string;
+      endedOn?: string;
+      description?: string;
+    },
+  ) {
+    const profile = await this.requireJobberProfile(userId);
+    const row = await this.prisma.jobberEducation.create({
+      data: {
+        id: randomUUID(),
+        jobberProfileId: profile.id,
+        title: dto.title.trim(),
+        institution: dto.institution?.trim() || null,
+        field: dto.field?.trim() || null,
+        startedOn: dto.startedOn ? new Date(dto.startedOn) : null,
+        endedOn: dto.endedOn ? new Date(dto.endedOn) : null,
+        description: dto.description?.trim() || null,
+      },
+    });
+    return this.serializeEducation(row);
+  }
+
+  async removeEducation(userId: string, id: string) {
+    const profile = await this.requireJobberProfile(userId);
+    const row = await this.prisma.jobberEducation.findFirst({
+      where: { id, jobberProfileId: profile.id },
+    });
+    if (!row) {
+      throw new NotFoundException('Formation introuvable');
+    }
+    await this.prisma.jobberEducation.delete({ where: { id } });
+    return { message: 'Formation supprimée' };
+  }
+
+  async listExperiences(userId: string) {
+    const profile = await this.requireJobberProfile(userId);
+    const rows = await this.prisma.jobberExperience.findMany({
+      where: { jobberProfileId: profile.id },
+      orderBy: { createdAt: 'asc' },
+    });
+    return rows.map((row) => this.serializeExperience(row));
+  }
+
+  async addExperience(
+    userId: string,
+    dto: {
+      title: string;
+      organization?: string;
+      description?: string;
+      startedOn?: string;
+      endedOn?: string;
+      isCurrent?: boolean;
+    },
+  ) {
+    const profile = await this.requireJobberProfile(userId);
+    const isCurrent = Boolean(dto.isCurrent);
+    const row = await this.prisma.jobberExperience.create({
+      data: {
+        id: randomUUID(),
+        jobberProfileId: profile.id,
+        title: dto.title.trim(),
+        organization: dto.organization?.trim() || null,
+        description: dto.description?.trim() || null,
+        startedOn: dto.startedOn ? new Date(dto.startedOn) : null,
+        endedOn: isCurrent ? null : dto.endedOn ? new Date(dto.endedOn) : null,
+        isCurrent,
+      },
+    });
+    return this.serializeExperience(row);
+  }
+
+  async removeExperience(userId: string, id: string) {
+    const profile = await this.requireJobberProfile(userId);
+    const row = await this.prisma.jobberExperience.findFirst({
+      where: { id, jobberProfileId: profile.id },
+    });
+    if (!row) {
+      throw new NotFoundException('Expérience introuvable');
+    }
+    await this.prisma.jobberExperience.delete({ where: { id } });
+    return { message: 'Expérience supprimée' };
+  }
+
   // ---------- Éligibilité & complétion ----------
 
   async getEligibility(userId: string, serviceId?: string) {
     const profile = await this.requireJobberProfile(userId);
     const user = await this.loadEligibilityUser(userId);
+    const approvedDocumentTypeIds =
+      await this.eligibilitySync.loadApprovedDocumentTypeIds(userId);
 
     if (serviceId) {
       const service = await this.prisma.service.findUnique({
@@ -398,6 +514,7 @@ export class JobbersService {
         jobber: { status: profile.status },
         service,
         requirements,
+        approvedDocumentTypeIds,
       });
       return this.serializeServiceEligibility(service, result);
     }
@@ -420,14 +537,85 @@ export class JobbersService {
         jobber: { status: profile.status },
         service: item.service,
         requirements: item.service.requirements,
+        approvedDocumentTypeIds,
       });
       return this.serializeServiceEligibility(item.service, result);
     });
   }
 
+  async getDocumentRequirements(userId: string) {
+    return this.eligibilitySync.getDocumentRequirementsSummary(userId);
+  }
+
   async getProfileCompletion(userId: string) {
     await this.requireJobberProfile(userId);
     return this.completionService.computeForUser(userId);
+  }
+
+  /**
+   * Résumé léger pour la page Profil Jobber.
+   * Pas de documents KYC, pas de VerificationCase complet.
+   * completedMissionsCount = affectations ACTIVE dont la Mission est COMPLETED.
+   */
+  async getProfileSummary(userId: string) {
+    const profile = await this.requireJobberProfile(userId);
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        firstName: true,
+        lastName: true,
+        identityVerificationStatus: true,
+      },
+    });
+    if (!user) {
+      throw new NotFoundException('Utilisateur introuvable');
+    }
+
+    const [services, photoMap, completedMissionsCount] = await Promise.all([
+      this.prisma.jobberService.findMany({
+        where: { jobberProfileId: profile.id },
+        include: {
+          service: { select: { id: true, name: true, slug: true } },
+        },
+        orderBy: { createdAt: 'asc' },
+        take: 12,
+      }),
+      loadApprovedProfilePhotoIds(this.prisma, [userId]),
+      this.prisma.missionAssignment.count({
+        where: {
+          jobberUserId: userId,
+          status: MissionAssignmentStatus.ACTIVE,
+          mission: { status: MissionStatus.COMPLETED },
+        },
+      }),
+    ]);
+
+    const photoDocumentId = photoMap.get(userId) ?? null;
+    const globallyVerified =
+      user.identityVerificationStatus ===
+        IdentityVerificationStatus.VERIFIED &&
+      profile.status === JobberStatus.ACTIVE;
+
+    const primaryServices = services.slice(0, 2).map((s) => ({
+      id: s.service.id,
+      name: s.service.name,
+      slug: s.service.slug,
+      status: s.status,
+    }));
+
+    return {
+      displayName: `${user.firstName} ${user.lastName}`.trim(),
+      firstName: user.firstName,
+      lastName: user.lastName,
+      headline: profile.headline,
+      profilePhotoDocumentId: photoDocumentId,
+      identityStatus: user.identityVerificationStatus,
+      jobberStatus: profile.status,
+      globallyVerified,
+      primaryServices,
+      additionalServicesCount: Math.max(0, services.length - 2),
+      completedMissionsCount,
+    };
   }
 
   // ---------- Helpers ----------
@@ -558,6 +746,58 @@ export class JobbersService {
       serviceId: skill.serviceId,
       createdAt: skill.createdAt.toISOString(),
       updatedAt: skill.updatedAt.toISOString(),
+    };
+  }
+
+  private serializeEducation(row: {
+    id: string;
+    title: string;
+    institution: string | null;
+    field: string | null;
+    startedOn: Date | null;
+    endedOn: Date | null;
+    description: string | null;
+    createdAt: Date;
+    updatedAt: Date;
+  }) {
+    return {
+      id: row.id,
+      title: row.title,
+      institution: row.institution,
+      field: row.field,
+      startedOn: row.startedOn
+        ? row.startedOn.toISOString().slice(0, 10)
+        : null,
+      endedOn: row.endedOn ? row.endedOn.toISOString().slice(0, 10) : null,
+      description: row.description,
+      createdAt: row.createdAt.toISOString(),
+      updatedAt: row.updatedAt.toISOString(),
+    };
+  }
+
+  private serializeExperience(row: {
+    id: string;
+    title: string;
+    organization: string | null;
+    description: string | null;
+    startedOn: Date | null;
+    endedOn: Date | null;
+    isCurrent: boolean;
+    createdAt: Date;
+    updatedAt: Date;
+  }) {
+    return {
+      id: row.id,
+      title: row.title,
+      organization: row.organization,
+      description: row.description,
+      startedOn: row.startedOn
+        ? row.startedOn.toISOString().slice(0, 10)
+        : null,
+      endedOn: row.endedOn ? row.endedOn.toISOString().slice(0, 10) : null,
+      isCurrent: row.isCurrent,
+      createdAt: row.createdAt.toISOString(),
+      updatedAt: row.updatedAt.toISOString(),
     };
   }
 }

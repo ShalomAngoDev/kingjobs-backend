@@ -43,15 +43,25 @@ describe('missions HTTP surface', () => {
       [
         'GET /missions/available',
         'GET /missions/me/jobber',
+        'GET /missions/me/jobber/applications',
         'POST /missions/:id/applications',
         'GET /missions/:id/applications',
         'POST /missions/:missionId/applications/:applicationId/select',
+        'POST /missions/:missionId/applications/:applicationId/reject',
         'POST /missions/:missionId/applications/:applicationId/withdraw',
+        'POST /missions/:missionId/assignments/:assignmentId/cancel',
         'POST /missions',
         'GET /missions/me/client',
         'GET /missions/:id',
+        'GET /missions/:id/media/:mediaId',
+        'POST /missions/:id/media',
+        'DELETE /missions/:id/media/:mediaId',
         'PATCH /missions/:id',
-        'POST /missions/:id/publish',
+        'POST /missions/:id/submit-for-payment',
+        'POST /missions/:id/resubmit-for-review',
+        'POST /admin/missions/:id/approve',
+        'POST /admin/missions/:id/request-changes',
+        'POST /admin/missions/:id/reject',
         'POST /missions/:id/cancel',
         'POST /missions/:id/request-completion',
         'POST /missions/:id/verifications/start-code',
@@ -62,6 +72,7 @@ describe('missions HTTP surface', () => {
         'POST /missions/:id/verifications/validate-end',
         'POST /missions/:id/incidents',
         'GET /admin/missions',
+        'GET /admin/missions/counts',
         'GET /admin/missions/:id',
         'GET /admin/missions/:id/history',
         'GET /admin/incidents',
@@ -70,9 +81,12 @@ describe('missions HTTP surface', () => {
     );
   });
 
-  it('has NO payment confirmation route (internal-only markPaymentConfirmed)', () => {
+  it('has NO generic payment confirmation route (simulation is PaymentsModule + Mock only)', () => {
     for (const route of routes) {
-      expect(route.toLowerCase()).not.toMatch(/payment|confirm/);
+      const lower = route.toLowerCase();
+      expect(lower).not.toMatch(
+        /confirm-payment|payment\/confirm|payments\/confirm$/,
+      );
     }
   });
 

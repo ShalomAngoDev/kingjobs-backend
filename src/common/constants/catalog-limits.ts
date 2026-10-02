@@ -15,5 +15,5 @@ export const CATALOG_LIMITS = {
 
 export const CATALOG_COUNTS = {
   CATEGORIES: 8,
-  SERVICES: 35,
+  SERVICES: 40,
 } as const;

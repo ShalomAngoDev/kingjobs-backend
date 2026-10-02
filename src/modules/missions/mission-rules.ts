@@ -1,4 +1,4 @@
-import { MissionStatus } from '@prisma/client';
+import { MissionAssignmentStatus, MissionStatus } from '@prisma/client';
 import {
   MISSION_LIMITS,
   RISK_FLAGS_REQUIRE_ADULT,
@@ -22,9 +22,10 @@ export function dedupeRiskFlags<T extends string>(flags: readonly T[]): T[] {
   return Array.from(new Set(flags));
 }
 
-/** Statuts à partir desquels le Jobber sélectionné voit l'adresse précise. */
+/** Statuts mission où l'adresse peut être visible pour un Jobber affecté (hors PUBLISHED partiel). */
 export const ADDRESS_VISIBLE_TO_JOBBER_STATUSES: ReadonlySet<MissionStatus> =
   new Set<MissionStatus>([
+    MissionStatus.PUBLISHED,
     MissionStatus.APPLICATION_SELECTED,
     MissionStatus.PAYMENT_REQUIRED,
     MissionStatus.CONFIRMED,
@@ -41,10 +42,11 @@ type AddressSubject = {
   status: MissionStatus;
 };
 
-/** Adresse / coordonnées : Client propriétaire, ou Jobber sélectionné après sélection. */
+/** Adresse / coordonnées : Client propriétaire, ou Jobber avec affectation ACTIVE. */
 export function canSeeAddress(
   mission: AddressSubject,
   userId: string | null | undefined,
+  options?: { hasActiveAssignment?: boolean },
 ): boolean {
   if (!userId) {
     return false;
@@ -52,10 +54,10 @@ export function canSeeAddress(
   if (mission.clientUserId === userId) {
     return true;
   }
-  return (
-    mission.selectedJobberUserId === userId &&
-    ADDRESS_VISIBLE_TO_JOBBER_STATUSES.has(mission.status)
-  );
+  const isAssigned =
+    options?.hasActiveAssignment === true ||
+    mission.selectedJobberUserId === userId;
+  return isAssigned && ADDRESS_VISIBLE_TO_JOBBER_STATUSES.has(mission.status);
 }
 
 export type Pagination = { page: number; limit: number; skip: number };
@@ -68,3 +70,5 @@ export function resolvePagination(query: {
   const limit = Math.min(50, Math.max(1, Math.floor(query.limit ?? 20)));
   return { page, limit, skip: (page - 1) * limit };
 }
+
+export { MissionAssignmentStatus };

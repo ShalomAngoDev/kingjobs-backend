@@ -18,7 +18,9 @@ import { MissionApplicationsController } from '../src/modules/missions/mission-a
 import { MissionApplicationsService } from '../src/modules/missions/mission-applications.service';
 import { MissionIncidentsService } from '../src/modules/missions/mission-incidents.service';
 import { MissionLifecycleService } from '../src/modules/missions/mission-lifecycle.service';
+import { MissionReviewService } from '../src/modules/missions/mission-review.service';
 import { MissionVerificationService } from '../src/modules/missions/mission-verification.service';
+import { EmailService } from '../src/infrastructure/email/email.service';
 import { MissionsController } from '../src/modules/missions/missions.controller';
 import { MissionsService } from '../src/modules/missions/missions.service';
 import { InMemoryPrisma } from './support/in-memory-prisma';
@@ -75,6 +77,8 @@ export class E2ePrismaModule {}
     MissionApplicationsService,
     MissionVerificationService,
     MissionIncidentsService,
+    MissionReviewService,
+    { provide: EmailService, useValue: { send: async () => undefined } },
     { provide: APP_FILTER, useClass: GlobalExceptionFilter },
     { provide: APP_GUARD, useClass: HeaderAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },

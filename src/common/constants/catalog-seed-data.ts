@@ -1,6 +1,6 @@
 /**
  * Catalogue officiel KingJOBS V1 — source de vérité seed.
- * 8 catégories / 35 services. Slugs stables (idempotence).
+ * 8 catégories / 40 services. Slugs stables (idempotence).
  */
 export type CatalogCategorySeed = {
   slug: string;
@@ -93,6 +93,14 @@ export const CATALOG_SERVICE_SEEDS: CatalogServiceSeed[] = [
     categorySlug: 'maison-entretien',
     shortDescription: 'Entretien d’espaces verts.',
     displayOrder: 3,
+    minimumAge: 16,
+  },
+  {
+    slug: 'cuisine',
+    name: 'Cuisine',
+    categorySlug: 'maison-entretien',
+    shortDescription: 'Préparation de repas.',
+    displayOrder: 4,
     minimumAge: 16,
   },
   // Travaux & Réparations
@@ -203,19 +211,11 @@ export const CATALOG_SERVICE_SEEDS: CatalogServiceSeed[] = [
     minimumAge: 16,
   },
   {
-    slug: 'cuisine',
-    name: 'Cuisine',
-    categorySlug: 'evenements-creatif',
-    shortDescription: 'Préparation de repas.',
-    displayOrder: 2,
-    minimumAge: 16,
-  },
-  {
     slug: 'service-traiteur',
     name: 'Service traiteur',
     categorySlug: 'evenements-creatif',
     shortDescription: 'Service traiteur pour événements.',
-    displayOrder: 3,
+    displayOrder: 2,
     minimumAge: 16,
   },
   {
@@ -223,7 +223,7 @@ export const CATALOG_SERVICE_SEEDS: CatalogServiceSeed[] = [
     name: 'DJ',
     categorySlug: 'evenements-creatif',
     shortDescription: 'Animation musicale.',
-    displayOrder: 4,
+    displayOrder: 3,
     minimumAge: 16,
   },
   {
@@ -231,15 +231,52 @@ export const CATALOG_SERVICE_SEEDS: CatalogServiceSeed[] = [
     name: 'Décoration',
     categorySlug: 'evenements-creatif',
     shortDescription: 'Décoration d’espaces et d’événements.',
+    displayOrder: 4,
+    minimumAge: 16,
+  },
+  {
+    slug: 'nettoyage-evenementiel',
+    name: 'Personnel de nettoyage événementiel',
+    categorySlug: 'evenements-creatif',
+    shortDescription:
+      'Nettoyage et remise en état des espaces avant, pendant et après un événement.',
     displayOrder: 5,
     minimumAge: 16,
   },
   {
-    slug: 'couture',
-    name: 'Couture',
+    slug: 'montage-demontage-evenementiel',
+    name: 'Montage & démontage événementiel',
     categorySlug: 'evenements-creatif',
-    shortDescription: 'Retouches et confection.',
+    shortDescription:
+      'Installation et démontage de mobilier, stands et aménagements légers pour événements.',
     displayOrder: 6,
+    minimumAge: 18,
+  },
+  {
+    slug: 'technicien-evenementiel',
+    name: 'Technicien événementiel',
+    categorySlug: 'evenements-creatif',
+    shortDescription:
+      "Assistance technique pour l'installation, l'exploitation ou le démontage d'équipements événementiels selon les compétences requises.",
+    displayOrder: 7,
+    minimumAge: 18,
+  },
+  {
+    slug: 'agent-accueil-evenementiel',
+    name: "Agent d'accueil événementiel",
+    categorySlug: 'evenements-creatif',
+    shortDescription:
+      "Accueil, orientation et accompagnement du public lors d'événements.",
+    displayOrder: 8,
+    minimumAge: 16,
+  },
+  {
+    slug: 'personnel-evenementiel-polyvalent',
+    name: 'Personnel événementiel polyvalent',
+    categorySlug: 'evenements-creatif',
+    shortDescription:
+      "Renfort polyvalent pour aider à la préparation, au déroulement ou au rangement d'un événement.",
+    displayOrder: 9,
     minimumAge: 16,
   },
   // Beauté & Bien-être
@@ -266,6 +303,14 @@ export const CATALOG_SERVICE_SEEDS: CatalogServiceSeed[] = [
     shortDescription: 'Massage bien-être.',
     displayOrder: 3,
     minimumAge: 18,
+  },
+  {
+    slug: 'couture',
+    name: 'Couture',
+    categorySlug: 'beaute-bien-etre',
+    shortDescription: 'Retouches et confection.',
+    displayOrder: 4,
+    minimumAge: 16,
   },
   // Famille & Accompagnement
   {
@@ -367,6 +412,37 @@ export const DOCUMENT_TYPE_SEEDS = [
     description: 'Carte d’identité, passeport ou document officiel équivalent.',
   },
   {
+    code: 'CIP',
+    name: 'CIP',
+    description: 'Carte d’identité personnelle (Bénin).',
+  },
+  {
+    code: 'PASSPORT',
+    name: 'Passeport',
+    description: 'Passeport en cours de validité.',
+  },
+  {
+    code: 'RESIDENCE_CERTIFICATE',
+    name: 'Certificat de résidence',
+    description: 'Justificatif de domicile / certificat de résidence.',
+  },
+  {
+    code: 'LIVE_SELFIE',
+    name: 'Selfie live',
+    description: 'Selfie capturé en direct depuis l’application pour vérification humaine.',
+  },
+  {
+    code: 'PROFILE_PHOTO',
+    name: 'Photo de profil',
+    description:
+      'Photo de profil publique du Jobber (distincte du selfie KYC). Permet de le reconnaître.',
+  },
+  {
+    code: 'CV',
+    name: 'CV',
+    description: 'Curriculum vitae (facultatif sauf exigence service).',
+  },
+  {
     code: 'DRIVING_LICENSE',
     name: 'Permis de conduire',
     description: 'Permis de conduire valide le cas échéant.',
@@ -380,6 +456,11 @@ export const DOCUMENT_TYPE_SEEDS = [
     code: 'CERTIFICATE',
     name: 'Certificat',
     description: 'Certificat professionnel ou attestation.',
+  },
+  {
+    code: 'CERTIFICATION',
+    name: 'Certification',
+    description: 'Certification métier (alias produit de CERTIFICATE).',
   },
   {
     code: 'AUTHORIZATION',

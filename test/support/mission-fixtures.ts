@@ -1,4 +1,6 @@
 import { randomUUID } from 'node:crypto';
+import { MissionStatus } from '@prisma/client';
+import type { MissionLifecycleService } from '../../src/modules/missions/mission-lifecycle.service';
 import type { InMemoryPrisma } from './in-memory-prisma';
 
 export const ADULT_DOB = new Date('1995-05-10T00:00:00.000Z');
@@ -31,6 +33,7 @@ export async function createUser(
       status: 'ACTIVE',
       role: 'USER',
       legalGuardianStatus: 'NOT_REQUIRED',
+      identityVerificationStatus: 'VERIFIED',
       emailVerifiedAt: new Date(),
       phoneVerifiedAt: new Date(),
       ...overrides,
@@ -124,12 +127,42 @@ export async function insertMission(
       latitude: 6.3654,
       longitude: 2.4183,
       clientPriceAmount: 15000,
+      scheduledStartAt: new Date(Date.now() + 86_400_000 * 3),
+      paymentConfirmedAt: null,
+      publishedAt: null,
       serviceNameSnapshot: world.service.name,
       serviceSlugSnapshot: world.service.slug,
       categoryNameSnapshot: world.category.name,
       categorySlugSnapshot: world.category.slug,
       ...overrides,
     },
+  });
+}
+
+/** Chaîne BO04 : soumission → paiement → revue Admin → PUBLISHED. */
+export async function publishMissionThroughReview(
+  lifecycle: MissionLifecycleService,
+  missionId: string,
+  clientUserId: string,
+  adminUserId: string,
+) {
+  await lifecycle.submitForPayment(missionId, clientUserId);
+  await lifecycle.markPaymentConfirmed(missionId, clientUserId);
+  return lifecycle.approveForPublication(missionId, adminUserId);
+}
+
+/** Legacy : mission publiée sans revue (tests rétrocompat). */
+export async function insertPublishedMission(
+  db: InMemoryPrisma,
+  world: World,
+  overrides: Record<string, unknown> = {},
+) {
+  return insertMission(db, world, {
+    status: MissionStatus.PUBLISHED,
+    publishedAt: new Date(),
+    paymentConfirmedAt: new Date(),
+    scheduledStartAt: new Date(Date.now() + 86_400_000 * 3),
+    ...overrides,
   });
 }
 
@@ -141,5 +174,30 @@ export async function insertApplication(
 ) {
   return db.missionApplication.create({
     data: { missionId, jobberUserId, message: 'Disponible !', ...overrides },
+  });
+}
+
+export async function insertActiveAssignment(
+  db: InMemoryPrisma,
+  input: {
+    missionId: string;
+    jobberUserId: string;
+    applicationId: string;
+    selectedByUserId: string;
+    workerGrossAmount?: number;
+  },
+) {
+  return db.missionAssignment.create({
+    data: {
+      missionId: input.missionId,
+      jobberUserId: input.jobberUserId,
+      applicationId: input.applicationId,
+      selectedByUserId: input.selectedByUserId,
+      selectedAt: new Date(),
+      status: 'ACTIVE',
+      workerGrossAmount: input.workerGrossAmount ?? 15_000,
+      commissionRateBps: 1500,
+      currency: 'XOF',
+    },
   });
 }

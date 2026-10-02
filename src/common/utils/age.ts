@@ -20,8 +20,14 @@ export function calculateAge(
   return age;
 }
 
-/** Mineur = âge strictement inférieur à 18 ans. */
-export function isMinor(dateOfBirth: Date, now: Date = new Date()): boolean {
+/** Mineur = âge strictement inférieur à 18 ans. Sans DOB → non mineur connu. */
+export function isMinor(
+  dateOfBirth: Date | null | undefined,
+  now: Date = new Date(),
+): boolean {
+  if (!dateOfBirth) {
+    return false;
+  }
   return calculateAge(dateOfBirth, now) < 18;
 }
 

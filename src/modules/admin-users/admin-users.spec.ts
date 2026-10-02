@@ -115,6 +115,11 @@ describe('AdminUsersService (requêtes Prisma)', () => {
       sessions as never,
       {} as never,
       {} as never,
+      {
+        loadApprovedDocumentTypeIds: jest.fn().mockResolvedValue(new Set()),
+        recomputeForUser: jest.fn(),
+        getDocumentRequirementsSummary: jest.fn(),
+      } as never,
     );
     return { prisma, sessions, service };
   }

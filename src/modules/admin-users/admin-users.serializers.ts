@@ -72,8 +72,10 @@ export function toAdminUserItem(user: AdminUserRow) {
     lastName: user.lastName,
     email: user.email,
     phone: user.phone,
-    dateOfBirth: user.dateOfBirth.toISOString().slice(0, 10),
-    age: calculateAge(user.dateOfBirth),
+    dateOfBirth: user.dateOfBirth
+      ? user.dateOfBirth.toISOString().slice(0, 10)
+      : null,
+    age: user.dateOfBirth ? calculateAge(user.dateOfBirth) : null,
     status: user.status,
     role: user.role,
     emailVerifiedAt: iso(user.emailVerifiedAt),

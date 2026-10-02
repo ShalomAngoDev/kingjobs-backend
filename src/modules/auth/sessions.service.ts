@@ -108,7 +108,7 @@ export class SessionsService {
     const existing = await this.prisma.session.findUnique({
       where: { refreshTokenHash },
       include: {
-        user: { include: { jobberProfile: true } },
+        user: { include: { jobberProfile: true, clientProfile: true } },
       },
     });
 

@@ -6,6 +6,7 @@ import {
   AvailableMissionsQueryDto,
   MyMissionsQueryDto,
 } from './dto/mission-queries.dto';
+import { MissionApplicationsService } from './mission-applications.service';
 import { MissionsService } from './missions.service';
 
 /**
@@ -16,7 +17,10 @@ import { MissionsService } from './missions.service';
 @ApiBearerAuth()
 @Controller({ path: 'missions', version: '1' })
 export class JobberMissionsController {
-  constructor(private readonly missionsService: MissionsService) {}
+  constructor(
+    private readonly missionsService: MissionsService,
+    private readonly applications: MissionApplicationsService,
+  ) {}
 
   @Get('available')
   @ApiOperation({
@@ -30,11 +34,17 @@ export class JobberMissionsController {
   }
 
   @Get('me/jobber')
-  @ApiOperation({ summary: 'Mes missions en tant que Jobber sélectionné' })
+  @ApiOperation({ summary: 'Mes missions en tant que Jobber affecté' })
   mine(
     @CurrentUser() user: AuthenticatedUser,
     @Query() query: MyMissionsQueryDto,
   ) {
     return this.missionsService.listMineAsJobber(user.id, query);
+  }
+
+  @Get('me/jobber/applications')
+  @ApiOperation({ summary: 'Mes candidatures Jobber' })
+  myApplications(@CurrentUser() user: AuthenticatedUser) {
+    return this.applications.listMine(user.id);
   }
 }

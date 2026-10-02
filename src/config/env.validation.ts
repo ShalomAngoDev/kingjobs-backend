@@ -132,6 +132,58 @@ export class EnvironmentVariables {
   @IsOptional()
   @IsString()
   DEFAULT_PHONE_REGION?: string;
+
+  @IsOptional()
+  @IsString()
+  FILE_STORAGE_PATH?: string;
+
+  @IsOptional()
+  @IsIn(['local_private', 'object_storage', 'memory'])
+  STORAGE_PROVIDER?: 'local_private' | 'object_storage' | 'memory';
+
+  @IsOptional()
+  @IsString()
+  S3_ENDPOINT?: string;
+
+  @IsOptional()
+  @IsString()
+  S3_REGION?: string;
+
+  @IsOptional()
+  @IsString()
+  S3_BUCKET?: string;
+
+  @IsOptional()
+  @IsString()
+  S3_ACCESS_KEY_ID?: string;
+
+  @IsOptional()
+  @IsString()
+  S3_SECRET_ACCESS_KEY?: string;
+
+  @IsOptional()
+  @IsBooleanString()
+  S3_FORCE_PATH_STYLE?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(30)
+  @Max(900)
+  STORAGE_SIGNED_URL_TTL_SECONDS?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1024)
+  @Max(20 * 1024 * 1024)
+  STORAGE_MAX_UPLOAD_BYTES?: number;
+
+  /**
+   * mock = simulateur DEV (interdit en prod via factory).
+   * none / absent = fail-closed (endpoints simulation refusés).
+   */
+  @IsOptional()
+  @IsIn(['mock', 'none'])
+  PAYMENT_PROVIDER?: 'mock' | 'none';
 }
 
 /** Défauts non-secrets (Render manuel sans Blueprint / vars oubliées). */

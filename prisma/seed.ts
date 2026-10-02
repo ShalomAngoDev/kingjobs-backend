@@ -96,6 +96,19 @@ export async function seedCatalog(client: PrismaClient = prisma) {
     });
   }
 
+  const officialCategorySlugs = CATALOG_CATEGORY_SEEDS.map((c) => c.slug);
+  const officialServiceSlugs = CATALOG_SERVICE_SEEDS.map((s) => s.slug);
+
+  await client.serviceCategory.updateMany({
+    where: { slug: { notIn: officialCategorySlugs } },
+    data: { isActive: false },
+  });
+
+  await client.service.updateMany({
+    where: { slug: { notIn: officialServiceSlugs } },
+    data: { isActive: false },
+  });
+
   const [categories, services] = await Promise.all([
     client.serviceCategory.count(),
     client.service.count(),

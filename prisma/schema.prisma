@@ -31,6 +31,7 @@ enum JobberStatus {
   ACTIVE
   SUSPENDED
   REJECTED
+  NEEDS_CHANGES
 }
 
 enum IdentityVerificationStatus {
@@ -38,6 +39,7 @@ enum IdentityVerificationStatus {
   PENDING
   VERIFIED
   REJECTED
+  NEEDS_CHANGES
 }
 
 enum LegalGuardianStatus {
@@ -71,9 +73,12 @@ enum ServiceRequirementType {
 
 enum MissionStatus {
   DRAFT
+  PAYMENT_REQUIRED
+  PENDING_REVIEW
+  NEEDS_CHANGES
+  REJECTED
   PUBLISHED
   APPLICATION_SELECTED
-  PAYMENT_REQUIRED
   CONFIRMED
   READY_TO_START
   IN_PROGRESS
@@ -83,11 +88,81 @@ enum MissionStatus {
   DISPUTED
 }
 
+enum MissionSchedulingType {
+  ONCE
+  CONSECUTIVE_DAYS
+  SELECTED_DAYS
+}
+
+enum MissionPricingType {
+  FIXED
+  HOURLY
+  DAILY
+}
+
+/// Sémantique du tarif horaire/journalier lorsque workersNeeded > 1.
+enum MissionRateScope {
+  PER_JOBBER
+  TOTAL
+}
+
+enum MissionMediaType {
+  IMAGE
+}
+
+/// Tentative / confirmation de paiement Mission (publication). Distinct des payouts Jobber.
+enum PaymentStatus {
+  PENDING
+  CONFIRMED
+  FAILED
+  CANCELLED
+}
+
+enum MissionWeekday {
+  MON
+  TUE
+  WED
+  THU
+  FRI
+  SAT
+  SUN
+}
+
+enum MissionReviewChangeArea {
+  TITLE
+  SERVICE
+  DESCRIPTION
+  LOCATION
+  PLANNING
+  WORKERS
+  PRICING
+  PHOTOS
+  OTHER
+}
+
+enum MissionRejectionReason {
+  UNAUTHORIZED_SERVICE
+  DANGEROUS_REQUEST
+  ILLEGAL_REQUEST
+  INCONSISTENT_INFO
+  OUT_OF_SCOPE
+  OTHER
+}
+
 enum MissionApplicationStatus {
   PENDING
   WITHDRAWN
   SELECTED
   REJECTED
+  /// Places toutes pourvues : candidature clôturée sans rejet personnel.
+  MISSION_FILLED
+  /// Affectation annulée après sélection (désistement / annulation slot).
+  ASSIGNMENT_CANCELLED
+}
+
+enum MissionAssignmentStatus {
+  ACTIVE
+  CANCELLED
 }
 
 enum MissionVerificationType {
@@ -140,17 +215,72 @@ enum MissionRiskFlag {
   OTHER_RESTRICTED_ACTIVITY
 }
 
+enum UserDocumentStatus {
+  PENDING
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+  NEEDS_CHANGES
+  EXPIRED
+}
+
+enum VerificationCaseKind {
+  IDENTITY
+  JOBBER_PROFILE
+}
+
+enum VerificationCaseStatus {
+  DRAFT
+  PENDING
+  APPROVED
+  NEEDS_CHANGES
+  REJECTED
+}
+
+enum JobberSkillKind {
+  SKILL
+  QUALITY
+}
+
+enum IdentityDocumentSubType {
+  CIP
+  PASSPORT
+}
+
+enum AdminAuditAction {
+  VERIFY_DOCUMENT
+  REJECT_DOCUMENT
+  REQUEST_DOCUMENT_REPLACEMENT
+  APPROVE_PROFILE
+  REQUEST_PROFILE_CHANGES
+  REJECT_PROFILE
+  VIEW_VERIFICATION_DOCUMENT
+  APPROVE_MISSION
+  REQUEST_MISSION_CHANGES
+  REJECT_MISSION
+  SERVICE_CREATED
+  SERVICE_UPDATED
+  SERVICE_ENABLED
+  SERVICE_DISABLED
+  SERVICE_CATEGORY_CHANGED
+}
+
 model User {
   id                         String                     @id @default(uuid()) @db.Uuid
   firstName                  String                     @map("first_name") @db.VarChar(80)
   lastName                   String                     @map("last_name") @db.VarChar(80)
-  email                      String                     @db.VarChar(320)
-  emailNormalized            String                     @unique @map("email_normalized") @db.VarChar(320)
+  email                      String?                    @db.VarChar(320)
+  emailNormalized            String?                    @unique @map("email_normalized") @db.VarChar(320)
   phone                      String                     @unique @db.VarChar(20)
   passwordHash               String                     @map("password_hash")
-  dateOfBirth                DateTime                   @map("date_of_birth") @db.Date
+  /// Nullable jusqu'à complétion profil (WEBAPP-01). Âge/KYC demandés ensuite.
+  dateOfBirth                DateTime?                  @map("date_of_birth") @db.Date
   emailVerifiedAt            DateTime?                  @map("email_verified_at") @db.Timestamptz(6)
   phoneVerifiedAt            DateTime?                  @map("phone_verified_at") @db.Timestamptz(6)
+  addressLine                String?                    @map("address_line") @db.VarChar(255)
+  city                       String?                    @db.VarChar(120)
+  countryCode                String                     @default("BJ") @map("country_code") @db.Char(2)
+  administrativeArea         String?                    @map("administrative_area") @db.VarChar(120)
   status                     UserStatus                 @default(ACTIVE)
   role                       UserRole                   @default(USER)
   identityVerificationStatus IdentityVerificationStatus @default(UNVERIFIED) @map("identity_verification_status")
@@ -167,14 +297,28 @@ model User {
   accountTokens    AccountToken[]
   phoneOtps        PhoneOtp[]
   termsAcceptances TermsAcceptance[]
+  languages        UserLanguage[]
+  documents        UserDocument[]
+  documentEvents   UserDocumentEvent[]     @relation("DocumentEventActor")
+  verificationCases VerificationCase[]
+  reviewedCases    VerificationCase[]      @relation("VerificationReviewer")
+  reviewedDocuments UserDocument[]         @relation("DocumentReviewer")
+  adminAuditEvents AdminAuditEvent[]       @relation("AuditActor")
   clientMissions   Mission[]            @relation("MissionClient")
   selectedMissions Mission[]            @relation("MissionSelectedJobber")
   missionApplications MissionApplication[]
+  missionAssignmentsAsJobber MissionAssignment[] @relation("MissionAssignmentJobber")
+  missionAssignmentsSelected MissionAssignment[] @relation("MissionAssignmentSelector")
   missionCancellations MissionCancellation[]
   missionIncidents     MissionIncident[]     @relation("IncidentReporter")
   missionStatusEvents  MissionStatusHistory[]
+  missionMediaUploads  MissionMedia[]          @relation("MissionMediaUploader")
+  payments             Payment[]
+  notifications        UserNotification[]
 
   @@index([status])
+  @@index([identityVerificationStatus])
+  @@index([countryCode, city])
   @@map("users")
 }
 
@@ -204,6 +348,8 @@ model JobberProfile {
   services     JobberService[]
   skills       JobberSkill[]
   serviceAreas JobberServiceArea[]
+  educations   JobberEducation[]
+  experiences  JobberExperience[]
 
   @@index([status])
   @@map("jobber_profiles")
@@ -258,6 +404,7 @@ model DocumentType {
   updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   requirements ServiceRequirement[]
+  userDocuments UserDocument[]
 
   @@index([isActive])
   @@map("document_types")
@@ -305,21 +452,23 @@ model JobberService {
 }
 
 model JobberSkill {
-  id              String   @id @default(uuid()) @db.Uuid
-  jobberProfileId String   @map("jobber_profile_id") @db.Uuid
-  serviceId       String?  @map("service_id") @db.Uuid
+  id              String          @id @default(uuid()) @db.Uuid
+  jobberProfileId String          @map("jobber_profile_id") @db.Uuid
+  serviceId       String?         @map("service_id") @db.Uuid
   /// 'profile' ou UUID service — clé technique pour unicité (évite NULL dans unique)
-  scopeKey        String   @default("profile") @map("scope_key") @db.VarChar(40)
-  name            String   @db.VarChar(120)
-  nameNormalized  String   @map("name_normalized") @db.VarChar(120)
-  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  scopeKey        String          @default("profile") @map("scope_key") @db.VarChar(40)
+  kind            JobberSkillKind @default(SKILL)
+  name            String          @db.VarChar(120)
+  nameNormalized  String          @map("name_normalized") @db.VarChar(120)
+  createdAt       DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime        @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   jobberProfile JobberProfile @relation(fields: [jobberProfileId], references: [id], onDelete: Cascade)
   service       Service?      @relation(fields: [serviceId], references: [id], onDelete: SetNull)
 
   @@unique([jobberProfileId, nameNormalized, scopeKey])
   @@index([jobberProfileId])
+  @@index([jobberProfileId, kind])
   @@map("jobber_skills")
 }
 
@@ -424,16 +573,41 @@ model Mission {
   city                     String        @db.VarChar(120)
   district                 String?       @db.VarChar(120)
   addressLine              String?       @map("address_line") @db.VarChar(255)
+  locationNotes            String?       @map("location_notes") @db.VarChar(500)
   latitude                 Decimal?      @db.Decimal(9, 6)
   longitude                Decimal?      @db.Decimal(9, 6)
+  schedulingType           MissionSchedulingType @default(ONCE) @map("scheduling_type")
+  scheduleStartDate        DateTime?     @map("schedule_start_date") @db.Date
+  scheduleEndDate          DateTime?     @map("schedule_end_date") @db.Date
+  scheduleSameHoursDaily   Boolean?      @map("schedule_same_hours_daily")
+  selectedWeekdays         MissionWeekday[] @default([]) @map("selected_weekdays")
+  durationKnown            Boolean       @default(true) @map("duration_known")
   scheduledStartAt         DateTime?     @map("scheduled_start_at") @db.Timestamptz(6)
   estimatedDurationMinutes Int?          @map("estimated_duration_minutes")
+  /// Nombre de Jobbers recherchés. Affectations actives = MissionAssignment(ACTIVE).
+  workersNeeded            Int           @default(1) @map("workers_needed")
+  pricingType              MissionPricingType @default(FIXED) @map("pricing_type")
+  /// Tarif unitaire (HOURLY/DAILY) en FCFA. FIXED utilise clientPriceAmount.
+  rateAmount               Int?          @map("rate_amount")
+  rateScope                MissionRateScope @default(PER_JOBBER) @map("rate_scope")
+  /// Estimation totale (HOURLY/DAILY) en FCFA — distinct du montant final facturé.
+  estimatedAmount          Int?          @map("estimated_amount")
   /// Prix client en FCFA entiers (XOF) — jamais Float.
   clientPriceAmount        Int           @map("client_price_amount")
   currency                 String        @default("XOF") @db.Char(3)
+  paymentConfirmedAt       DateTime?     @map("payment_confirmed_at") @db.Timestamptz(6)
+  submittedForReviewAt     DateTime?     @map("submitted_for_review_at") @db.Timestamptz(6)
+  reviewInternalNote       String?       @map("review_internal_note") @db.VarChar(2000)
+  clientReviewMessage      String?       @map("client_review_message") @db.VarChar(2000)
+  reviewChangeAreas        MissionReviewChangeArea[] @default([]) @map("review_change_areas")
+  rejectionReasonCode      MissionRejectionReason? @map("rejection_reason_code")
+  rejectionReasonText      String?       @map("rejection_reason_text") @db.VarChar(2000)
+  /// Mission payée puis refusée : suivi financier manuel (module Payment futur).
+  financialFollowUpRequired Boolean      @default(false) @map("financial_follow_up_required")
   minimumAge               Int           @default(16) @map("minimum_age")
   riskFlags                MissionRiskFlag[] @map("risk_flags")
   status                   MissionStatus @default(DRAFT)
+  /// Legacy mono-Jobber + synchro « premier ACTIVE » pour START/END V1 (dette BO06).
   selectedJobberUserId     String?       @map("selected_jobber_user_id") @db.Uuid
   serviceNameSnapshot      String        @map("service_name_snapshot") @db.VarChar(120)
   serviceSlugSnapshot      String        @map("service_slug_snapshot") @db.VarChar(120)
@@ -453,17 +627,82 @@ model Mission {
   selectedJobber User?                  @relation("MissionSelectedJobber", fields: [selectedJobberUserId], references: [id], onDelete: SetNull)
   service        Service                @relation(fields: [serviceId], references: [id], onDelete: Restrict)
   applications   MissionApplication[]
+  assignments    MissionAssignment[]
   verifications  MissionVerification[]
   cancellations  MissionCancellation[]
   incidents      MissionIncident[]
   statusHistory  MissionStatusHistory[]
+  occurrences    MissionOccurrence[]
+  media          MissionMedia[]
+  payments       Payment[]
 
   @@index([clientUserId, status])
   @@index([selectedJobberUserId, status])
   @@index([serviceId, status])
   @@index([status, publishedAt])
+  @@index([status, submittedForReviewAt])
   @@index([city, countryCode])
+  @@index([pricingType])
+  @@index([schedulingType])
   @@map("missions")
+}
+
+model MissionOccurrence {
+  id                       String   @id @default(uuid()) @db.Uuid
+  missionId                String   @map("mission_id") @db.Uuid
+  occurrenceDate           DateTime @map("occurrence_date") @db.Date
+  plannedStartAt           DateTime? @map("planned_start_at") @db.Timestamptz(6)
+  plannedEndAt             DateTime? @map("planned_end_at") @db.Timestamptz(6)
+  estimatedDurationMinutes Int?     @map("estimated_duration_minutes")
+  sortOrder                Int      @default(0) @map("sort_order")
+  createdAt                DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  mission Mission @relation(fields: [missionId], references: [id], onDelete: Cascade)
+
+  @@index([missionId, occurrenceDate])
+  @@map("mission_occurrences")
+}
+
+model MissionMedia {
+  id              String           @id @default(uuid()) @db.Uuid
+  missionId       String           @map("mission_id") @db.Uuid
+  mediaType       MissionMediaType @default(IMAGE) @map("media_type")
+  mimeType        String           @map("mime_type") @db.VarChar(120)
+  sizeBytes       Int              @map("size_bytes")
+  storageKey      String           @map("storage_key") @db.VarChar(512)
+  uploadedByUserId String          @map("uploaded_by_user_id") @db.Uuid
+  sortOrder       Int              @default(0) @map("sort_order")
+  createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  mission    Mission @relation(fields: [missionId], references: [id], onDelete: Cascade)
+  uploadedBy User    @relation("MissionMediaUploader", fields: [uploadedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([missionId, sortOrder])
+  @@map("mission_media")
+}
+
+/// Paiement publication Mission (mock DEV ou futur agrégateur). Jamais base64 / secrets provider.
+model Payment {
+  id                String        @id @default(uuid()) @db.Uuid
+  missionId         String        @map("mission_id") @db.Uuid
+  userId            String        @map("user_id") @db.Uuid
+  amount            Int
+  currency          String        @default("XOF") @db.Char(3)
+  /// MOCK | futur agrégateur (jamais confondre avec un encaissement réel si MOCK).
+  provider          String        @db.VarChar(32)
+  providerReference String        @unique @map("provider_reference") @db.VarChar(120)
+  status            PaymentStatus @default(PENDING)
+  createdAt         DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  confirmedAt       DateTime?     @map("confirmed_at") @db.Timestamptz(6)
+  failedAt          DateTime?     @map("failed_at") @db.Timestamptz(6)
+  cancelledAt       DateTime?     @map("cancelled_at") @db.Timestamptz(6)
+
+  mission Mission @relation(fields: [missionId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([missionId, status])
+  @@index([userId, createdAt])
+  @@map("payments")
 }
 
 model MissionApplication {
@@ -476,16 +715,47 @@ model MissionApplication {
   withdrawnAt  DateTime?                @map("withdrawn_at") @db.Timestamptz(6)
   selectedAt   DateTime?                @map("selected_at") @db.Timestamptz(6)
   rejectedAt   DateTime?                @map("rejected_at") @db.Timestamptz(6)
+  closedAt     DateTime?                @map("closed_at") @db.Timestamptz(6)
   createdAt    DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt    DateTime                 @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  mission Mission @relation(fields: [missionId], references: [id], onDelete: Cascade)
-  jobber  User    @relation(fields: [jobberUserId], references: [id], onDelete: Cascade)
+  mission    Mission             @relation(fields: [missionId], references: [id], onDelete: Cascade)
+  jobber     User                @relation(fields: [jobberUserId], references: [id], onDelete: Cascade)
+  assignment MissionAssignment?
 
   @@unique([missionId, jobberUserId])
   @@index([jobberUserId, status])
   @@index([missionId, status])
   @@map("mission_applications")
+}
+
+/// Affectation d'un Jobber sélectionné (≠ candidature). Snapshot financier à la sélection.
+model MissionAssignment {
+  id                 String                  @id @default(uuid()) @db.Uuid
+  missionId          String                  @map("mission_id") @db.Uuid
+  jobberUserId       String                  @map("jobber_user_id") @db.Uuid
+  applicationId      String                  @unique @map("application_id") @db.Uuid
+  status             MissionAssignmentStatus @default(ACTIVE)
+  selectedAt         DateTime                @map("selected_at") @db.Timestamptz(6)
+  selectedByUserId   String                  @map("selected_by_user_id") @db.Uuid
+  cancelledAt        DateTime?               @map("cancelled_at") @db.Timestamptz(6)
+  cancellationReason String?                 @map("cancellation_reason") @db.VarChar(500)
+  /// Brut Jobber (FCFA) figé à la sélection — base future payout.
+  workerGrossAmount  Int                     @map("worker_gross_amount")
+  /// Commission KingJOBS en points de base (1500 = 15 %).
+  commissionRateBps  Int                     @default(1500) @map("commission_rate_bps")
+  currency           String                  @default("XOF") @db.Char(3)
+  createdAt          DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime                @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  mission      Mission            @relation(fields: [missionId], references: [id], onDelete: Cascade)
+  jobber       User               @relation("MissionAssignmentJobber", fields: [jobberUserId], references: [id], onDelete: Restrict)
+  application  MissionApplication @relation(fields: [applicationId], references: [id], onDelete: Restrict)
+  selectedBy   User               @relation("MissionAssignmentSelector", fields: [selectedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([missionId, status])
+  @@index([jobberUserId, status])
+  @@map("mission_assignments")
 }
 
 model MissionVerification {
@@ -559,4 +829,182 @@ model MissionStatusHistory {
 
   @@index([missionId, createdAt])
   @@map("mission_status_history")
+}
+
+model UserLanguage {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  code      String   @db.VarChar(16)
+  label     String   @db.VarChar(80)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, code])
+  @@index([userId])
+  @@map("user_languages")
+}
+
+model JobberEducation {
+  id              String    @id @default(uuid()) @db.Uuid
+  jobberProfileId String    @map("jobber_profile_id") @db.Uuid
+  institution     String?   @db.VarChar(160)
+  title           String    @db.VarChar(160)
+  field           String?   @db.VarChar(160)
+  startedOn       DateTime? @map("started_on") @db.Date
+  endedOn         DateTime? @map("ended_on") @db.Date
+  description     String?   @db.VarChar(1000)
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  jobberProfile JobberProfile @relation(fields: [jobberProfileId], references: [id], onDelete: Cascade)
+
+  @@index([jobberProfileId])
+  @@map("jobber_educations")
+}
+
+model JobberExperience {
+  id              String    @id @default(uuid()) @db.Uuid
+  jobberProfileId String    @map("jobber_profile_id") @db.Uuid
+  title           String    @db.VarChar(160)
+  organization    String?   @db.VarChar(160)
+  description     String?   @db.VarChar(1000)
+  startedOn       DateTime? @map("started_on") @db.Date
+  endedOn         DateTime? @map("ended_on") @db.Date
+  isCurrent       Boolean   @default(false) @map("is_current")
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  jobberProfile JobberProfile @relation(fields: [jobberProfileId], references: [id], onDelete: Cascade)
+
+  @@index([jobberProfileId])
+  @@map("jobber_experiences")
+}
+
+model VerificationCase {
+  id            String                 @id @default(uuid()) @db.Uuid
+  userId        String                 @map("user_id") @db.Uuid
+  kind          VerificationCaseKind
+  status        VerificationCaseStatus @default(DRAFT)
+  submittedAt   DateTime?              @map("submitted_at") @db.Timestamptz(6)
+  reviewedAt    DateTime?              @map("reviewed_at") @db.Timestamptz(6)
+  reviewedById  String?                @map("reviewed_by_id") @db.Uuid
+  userMessage   String?                @map("user_message") @db.VarChar(2000)
+  internalNote  String?                @map("internal_note") @db.VarChar(2000)
+  reasonCode    String?                @map("reason_code") @db.VarChar(80)
+  resubmitOfId  String?                @map("resubmit_of_id") @db.Uuid
+  createdAt     DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime               @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user       User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reviewedBy User?              @relation("VerificationReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  resubmitOf VerificationCase?  @relation("VerificationResubmit", fields: [resubmitOfId], references: [id], onDelete: SetNull)
+  resubmits  VerificationCase[] @relation("VerificationResubmit")
+  documents  UserDocument[]
+
+  @@index([userId, kind, status])
+  @@index([status, submittedAt])
+  @@index([kind, status])
+  @@map("verification_cases")
+}
+
+model UserDocument {
+  id               String                  @id @default(uuid()) @db.Uuid
+  userId           String                  @map("user_id") @db.Uuid
+  documentTypeId   String                  @map("document_type_id") @db.Uuid
+  verificationCaseId String?               @map("verification_case_id") @db.Uuid
+  identitySubType  IdentityDocumentSubType? @map("identity_sub_type")
+  status           UserDocumentStatus      @default(PENDING)
+  storageKey       String                  @map("storage_key") @db.VarChar(512)
+  mimeType         String                  @map("mime_type") @db.VarChar(120)
+  sizeBytes        Int                     @map("size_bytes")
+  originalFilename String?                 @map("original_filename") @db.VarChar(255)
+  capturedAt       DateTime?               @map("captured_at") @db.Timestamptz(6)
+  submittedAt      DateTime                @default(now()) @map("submitted_at") @db.Timestamptz(6)
+  reviewedAt       DateTime?               @map("reviewed_at") @db.Timestamptz(6)
+  reviewedById     String?                 @map("reviewed_by_id") @db.Uuid
+  reasonCode       String?                 @map("reason_code") @db.VarChar(80)
+  userMessage      String?                 @map("user_message") @db.VarChar(2000)
+  createdAt        DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime                @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  documentType     DocumentType      @relation(fields: [documentTypeId], references: [id], onDelete: Restrict)
+  verificationCase VerificationCase? @relation(fields: [verificationCaseId], references: [id], onDelete: SetNull)
+  reviewedBy       User?             @relation("DocumentReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  events           UserDocumentEvent[]
+
+  @@index([userId, status])
+  @@index([documentTypeId, status])
+  @@index([verificationCaseId])
+  @@index([status, submittedAt])
+  @@map("user_documents")
+}
+
+model UserDocumentEvent {
+  id         String   @id @default(uuid()) @db.Uuid
+  documentId String   @map("document_id") @db.Uuid
+  actorId    String?  @map("actor_id") @db.Uuid
+  action     String   @db.VarChar(80)
+  metadata   Json?
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  document UserDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  actor    User?        @relation("DocumentEventActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([documentId, createdAt])
+  @@map("user_document_events")
+}
+
+model AdminAuditEvent {
+  id           String           @id @default(uuid()) @db.Uuid
+  actorId      String           @map("actor_id") @db.Uuid
+  action       AdminAuditAction
+  resourceType String           @map("resource_type") @db.VarChar(80)
+  resourceId   String           @map("resource_id") @db.VarChar(80)
+  metadata     Json?
+  createdAt    DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  actor User @relation("AuditActor", fields: [actorId], references: [id], onDelete: Restrict)
+
+  @@index([actorId, createdAt])
+  @@index([resourceType, resourceId])
+  @@index([action, createdAt])
+  @@map("admin_audit_events")
+}
+
+/// Notifications in-app (Jobber / Client). Extensible ; email/SMS/push restent des canaux séparés.
+enum UserNotificationType {
+  JOBBER_PROFILE_VERIFIED
+  JOBBER_VERIFICATION_NEEDS_CHANGES
+  JOBBER_VERIFICATION_REJECTED
+  IDENTITY_VERIFIED
+  MISSION_APPLICATION_RECEIVED
+  /// Jobber sélectionné sur une mission.
+  JOBBER_APPLICATION_SELECTED
+  /// Candidature non retenue par le Client.
+  JOBBER_APPLICATION_REJECTED
+  /// Places pourvues (pas un rejet personnel).
+  JOBBER_MISSION_FILLED
+}
+
+model UserNotification {
+  id        String               @id @default(uuid()) @db.Uuid
+  userId    String               @map("user_id") @db.Uuid
+  type      UserNotificationType
+  title     String               @db.VarChar(160)
+  message   String               @db.VarChar(1000)
+  /// Clé d'idempotence par utilisateur (évite les doublons sur rejeu).
+  dedupeKey String               @map("dedupe_key") @db.VarChar(160)
+  actionUrl String?              @map("action_url") @db.VarChar(320)
+  readAt    DateTime?            @map("read_at") @db.Timestamptz(6)
+  createdAt DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, dedupeKey])
+  @@index([userId, createdAt])
+  @@index([userId, readAt])
+  @@map("user_notifications")
 }

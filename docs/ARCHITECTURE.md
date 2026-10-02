@@ -30,6 +30,7 @@ src/
 - `auth`, `users`, `jobbers` — Backend 02 (+ extensions profil Backend 03)
 - `catalog`, `eligibility` — Backend 03 (catalogue, exigences, éligibilité)
 - `missions` — Backend 04 (cycle de vie, candidatures, vérifications code/QR, annulations, incidents, admin) — voir [MISSIONS-LIFECYCLE.md](MISSIONS-LIFECYCLE.md)
+- `workersNeeded` (collecte multi-personnes Phase 1) — catalogue 8 catégories / 40 services (événementiel sous Événements & Créatif) — voir [MULTI-JOBBER-MISSIONS.md](MULTI-JOBBER-MISSIONS.md) ; sélection multi-Jobber reportée Phase 2
 - Garde-fous DB — Backend 04.1 (`src/common/db`, `scripts/db-guard.ts`) — voir [DATABASE-SAFETY.md](DATABASE-SAFETY.md)
 
 ## Modules futurs (non créés maintenant)

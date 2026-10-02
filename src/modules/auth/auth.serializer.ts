@@ -8,15 +8,19 @@ export function toSafeUser(user: UserWithJobber): SafeUser {
     lastName: user.lastName,
     email: user.email,
     phone: user.phone,
-    dateOfBirth: user.dateOfBirth.toISOString().slice(0, 10),
+    countryCode: user.countryCode,
+    dateOfBirth: user.dateOfBirth
+      ? user.dateOfBirth.toISOString().slice(0, 10)
+      : null,
     emailVerifiedAt: user.emailVerifiedAt?.toISOString() ?? null,
     phoneVerifiedAt: user.phoneVerifiedAt?.toISOString() ?? null,
     status: user.status,
     role: user.role,
     identityVerificationStatus: user.identityVerificationStatus,
     legalGuardianStatus: user.legalGuardianStatus,
-    isMinor: isMinor(user.dateOfBirth),
+    isMinor: user.dateOfBirth ? isMinor(user.dateOfBirth) : false,
     hasJobberProfile: Boolean(user.jobberProfile),
+    hasClientProfile: Boolean(user.clientProfile),
     jobberStatus: user.jobberProfile?.status ?? null,
     createdAt: user.createdAt.toISOString(),
   };

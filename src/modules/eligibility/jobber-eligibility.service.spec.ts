@@ -143,7 +143,6 @@ describe('JobberEligibilityService', () => {
   });
 
   it.each([
-    ServiceRequirementType.DOCUMENT,
     ServiceRequirementType.QUALIFICATION,
     ServiceRequirementType.MANUAL_APPROVAL,
   ])('keeps %s required requirement pending', (type) => {
@@ -159,14 +158,57 @@ describe('JobberEligibilityService', () => {
     expect(result.reasons.map((r) => r.code)).toContain('PENDING_REQUIREMENT');
   });
 
+  it('keeps DOCUMENT requirement pending without approved document', () => {
+    const result = service.evaluate({
+      user: baseUser,
+      jobber,
+      service: { ...baseService, name: 'Chauffeur', slug: 'chauffeur' },
+      requirements: [
+        requirement({
+          type: ServiceRequirementType.DOCUMENT,
+          label: 'Permis de conduire',
+          documentTypeId: 'dt-permis',
+        }),
+      ],
+      approvedDocumentTypeIds: new Set(),
+      now,
+    });
+    expect(result.eligible).toBe(false);
+    expect(result.status).toBe(JobberServiceStatus.PENDING_ELIGIBILITY);
+    expect(result.reasons.map((r) => r.code)).toContain(
+      'DOCUMENT_REQUIREMENT_MISSING',
+    );
+    expect(result.reasons[0]?.message).toContain('Chauffeur');
+    expect(result.reasons[0]?.message).toContain('Permis de conduire');
+  });
+
+  it('is eligible when DOCUMENT requirement is APPROVED', () => {
+    const result = service.evaluate({
+      user: baseUser,
+      jobber,
+      service: { ...baseService, name: 'Chauffeur', slug: 'chauffeur' },
+      requirements: [
+        requirement({
+          type: ServiceRequirementType.DOCUMENT,
+          label: 'Permis de conduire',
+          documentTypeId: 'dt-permis',
+        }),
+      ],
+      approvedDocumentTypeIds: new Set(['dt-permis']),
+      now,
+    });
+    expect(result.eligible).toBe(true);
+    expect(result.status).toBe(JobberServiceStatus.ELIGIBLE);
+  });
+
   it('ignores optional and inactive requirements', () => {
     const result = service.evaluate({
       user: baseUser,
       jobber,
       service: baseService,
       requirements: [
-        requirement({ isRequired: false }),
-        requirement({ code: 'OLD', isActive: false }),
+        requirement({ isRequired: false, documentTypeId: 'dt-x' }),
+        requirement({ code: 'OLD', isActive: false, documentTypeId: 'dt-y' }),
       ],
       now,
     });

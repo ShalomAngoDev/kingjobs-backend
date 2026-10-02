@@ -10,10 +10,13 @@ import {
 } from '@prisma/client';
 import { InMemoryPrisma } from '../../../test/support/in-memory-prisma';
 import {
+  insertActiveAssignment,
+  insertApplication,
   insertMission,
   seedWorld,
   type World,
 } from '../../../test/support/mission-fixtures';
+import { MissionApplicationStatus } from '@prisma/client';
 import { MissionIncidentsService } from './mission-incidents.service';
 import { MissionLifecycleService } from './mission-lifecycle.service';
 
@@ -34,13 +37,25 @@ describe('MissionIncidentsService', () => {
     );
   });
 
-  const confirmed = (overrides: Record<string, any> = {}) =>
-    insertMission(db, world, {
+  const confirmed = async (overrides: Record<string, any> = {}) => {
+    const mission = await insertMission(db, world, {
       status: MissionStatus.CONFIRMED,
       selectedJobberUserId: world.jobber.id,
       scheduledStartAt: past(),
       ...overrides,
     });
+    const app = await insertApplication(db, mission.id, world.jobber.id, {
+      status: MissionApplicationStatus.SELECTED,
+      selectedAt: new Date(),
+    });
+    await insertActiveAssignment(db, {
+      missionId: mission.id,
+      jobberUserId: world.jobber.id,
+      applicationId: app.id,
+      selectedByUserId: world.client.id,
+    });
+    return mission;
+  };
 
   const description = 'Description de l’incident rencontré.';
 

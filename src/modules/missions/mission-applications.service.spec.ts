@@ -34,12 +34,30 @@ describe('MissionApplicationsService', () => {
     service = new MissionApplicationsService(
       prisma,
       new JobberEligibilityService(),
+      {
+        loadApprovedDocumentTypeIds: jest.fn().mockResolvedValue(new Set()),
+        recomputeForUser: jest.fn().mockResolvedValue(undefined),
+        getDocumentRequirementsSummary: jest.fn(),
+      } as never,
       new MissionLifecycleService(prisma),
+      { send: jest.fn().mockResolvedValue(undefined) } as never,
+      {
+        createIfAbsent: jest.fn().mockResolvedValue(null),
+        listForUser: jest.fn(),
+        unreadCount: jest.fn(),
+        markRead: jest.fn(),
+        markAllRead: jest.fn(),
+      } as never,
     );
   });
 
   const publishedMission = (overrides: Record<string, any> = {}) =>
-    insertMission(db, world, { status: MissionStatus.PUBLISHED, ...overrides });
+    insertMission(db, world, {
+      status: MissionStatus.PUBLISHED,
+      publishedAt: new Date(),
+      paymentConfirmedAt: new Date(),
+      ...overrides,
+    });
 
   describe('apply', () => {
     it('lets an eligible jobber apply to a published mission', async () => {
@@ -52,6 +70,39 @@ describe('MissionApplicationsService', () => {
         status: MissionApplicationStatus.PENDING,
         message: 'Je suis dispo',
       });
+    });
+
+    it.each([['UNVERIFIED'], ['PENDING'], ['NEEDS_CHANGES'], ['REJECTED']])(
+      'refuses a jobber whose identity is %s',
+      async (identityVerificationStatus) => {
+        const mission = await publishedMission();
+        await db.user.update({
+          where: { id: world.jobber.id },
+          data: { identityVerificationStatus },
+        });
+        await expect(
+          service.apply(world.jobber.id, mission.id, {}),
+        ).rejects.toThrow(
+          'Votre profil doit être vérifié avant de pouvoir candidater à une mission.',
+        );
+      },
+    );
+
+    it.each([
+      [JobberStatus.DRAFT],
+      [JobberStatus.PENDING_VERIFICATION],
+      [JobberStatus.NEEDS_CHANGES],
+    ])('refuses a jobber whose profile is %s', async (status) => {
+      const mission = await publishedMission();
+      await db.jobberProfile.updateMany({
+        where: { userId: world.jobber.id },
+        data: { status },
+      });
+      await expect(
+        service.apply(world.jobber.id, mission.id, {}),
+      ).rejects.toThrow(
+        'Votre profil doit être vérifié avant de pouvoir candidater à une mission.',
+      );
     });
 
     it('rejects a duplicate application (409)', async () => {
@@ -215,13 +266,16 @@ describe('MissionApplicationsService', () => {
 
       expect(result.items).toHaveLength(1);
       const [item] = result.items;
-      expect(item.jobber).toEqual({
+      expect(item.jobber).toMatchObject({
         userId: world.jobber.id,
         firstName: 'Jules',
         lastName: 'Jobber',
         headline: 'Pro du ménage',
         bio: 'Dix ans d’expérience',
       });
+      expect(result.workersNeeded).toBe(1);
+      expect(result.filledWorkers).toBe(0);
+      expect(result.remainingWorkers).toBe(1);
       const json = JSON.stringify(result);
       expect(json).not.toContain('passwordHash');
       expect(json).not.toContain('hash-secret');
@@ -245,13 +299,90 @@ describe('MissionApplicationsService', () => {
   });
 
   describe('select', () => {
-    it('selects and returns the mission in PAYMENT_REQUIRED with address', async () => {
+    it('selects and returns the mission in CONFIRMED when publication is paid', async () => {
       const mission = await publishedMission();
       const app = await insertApplication(db, mission.id, world.jobber.id);
       const result = await service.select(world.client.id, mission.id, app.id);
-      expect(result.status).toBe(MissionStatus.PAYMENT_REQUIRED);
+      expect(result.status).toBe(MissionStatus.CONFIRMED);
       expect(result.selectedJobberUserId).toBe(world.jobber.id);
       expect(result.addressLine).toBe('12 rue des Cocotiers');
+      expect(result.status).not.toBe(MissionStatus.PAYMENT_REQUIRED);
+    });
+
+    it('rejects a second select when workersNeeded=1', async () => {
+      const mission = await publishedMission({ workersNeeded: 1 });
+      const first = await insertApplication(db, mission.id, world.jobber.id);
+      const second = await insertApplication(db, mission.id, world.jobber2.id);
+      await service.select(world.client.id, mission.id, first.id);
+      await expect(
+        service.select(world.client.id, mission.id, second.id),
+      ).rejects.toBeInstanceOf(ConflictException);
+      expect(
+        (
+          await db.missionApplication.findUnique({ where: { id: second.id } })
+        )?.status,
+      ).toBe(MissionApplicationStatus.MISSION_FILLED);
+    });
+
+    it('closes remaining PENDING as MISSION_FILLED when the last slot is taken', async () => {
+      const mission = await publishedMission({ workersNeeded: 1 });
+      const chosen = await insertApplication(db, mission.id, world.jobber.id);
+      const other = await insertApplication(db, mission.id, world.jobber2.id);
+      await service.select(world.client.id, mission.id, chosen.id);
+      expect(
+        (await db.missionApplication.findUnique({ where: { id: other.id } }))
+          ?.status,
+      ).toBe(MissionApplicationStatus.MISSION_FILLED);
+    });
+
+    it('keeps selecting until workersNeeded then rejects extras', async () => {
+      const mission = await publishedMission({
+        workersNeeded: 2,
+        clientPriceAmount: 20_000,
+        estimatedAmount: 20_000,
+        rateAmount: 10_000,
+        rateScope: 'PER_JOBBER',
+      });
+      const a = await insertApplication(db, mission.id, world.jobber.id);
+      const b = await insertApplication(db, mission.id, world.jobber2.id);
+      const thirdJobber = await createJobber(db, world.service.id);
+      const c = await insertApplication(db, mission.id, thirdJobber.id);
+
+      expect(
+        (await service.select(world.client.id, mission.id, a.id)).status,
+      ).toBe(MissionStatus.PUBLISHED);
+      expect(
+        (await service.select(world.client.id, mission.id, b.id)).status,
+      ).toBe(MissionStatus.CONFIRMED);
+      await expect(
+        service.select(world.client.id, mission.id, c.id),
+      ).rejects.toBeInstanceOf(ConflictException);
+    });
+
+    it('cancelAssignment reopens a slot', async () => {
+      const mission = await publishedMission({
+        workersNeeded: 2,
+        clientPriceAmount: 20_000,
+        estimatedAmount: 20_000,
+        rateAmount: 10_000,
+        rateScope: 'PER_JOBBER',
+      });
+      const a = await insertApplication(db, mission.id, world.jobber.id);
+      const b = await insertApplication(db, mission.id, world.jobber2.id);
+      await service.select(world.client.id, mission.id, a.id);
+      await service.select(world.client.id, mission.id, b.id);
+
+      const assignment = await db.missionAssignment.findFirst({
+        where: { missionId: mission.id, jobberUserId: world.jobber.id },
+      });
+      const after = await service.cancelAssignment(
+        world.client.id,
+        mission.id,
+        assignment!.id,
+        'Slot libéré',
+        true,
+      );
+      expect(after.status).toBe(MissionStatus.PUBLISHED);
     });
 
     it('refuses to select a jobber who is no longer eligible', async () => {

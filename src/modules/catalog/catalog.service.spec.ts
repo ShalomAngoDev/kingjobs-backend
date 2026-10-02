@@ -16,6 +16,7 @@ describe('CatalogService', () => {
       findUnique: jest.fn(),
       create: jest.fn(),
       update: jest.fn(),
+      count: jest.fn(),
     },
     service: {
       findMany: jest.fn(),
@@ -23,13 +24,15 @@ describe('CatalogService', () => {
       findUnique: jest.fn(),
       create: jest.fn(),
       update: jest.fn(),
+      count: jest.fn(),
     },
     serviceRequirement: {
       findUnique: jest.fn(),
       create: jest.fn(),
       update: jest.fn(),
+      count: jest.fn(),
     },
-    documentType: { findUnique: jest.fn() },
+    documentType: { findUnique: jest.fn(), findMany: jest.fn() },
   };
   const service = new CatalogService(prisma as unknown as PrismaService);
 
@@ -176,6 +179,109 @@ describe('CatalogService', () => {
           code: 'X',
           label: 'X',
         }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+  });
+
+  describe('admin read', () => {
+    it('getAdminCatalogOverview aggregates counts and attention when needed', async () => {
+      prisma.serviceCategory.count
+        .mockResolvedValueOnce(8)
+        .mockResolvedValueOnce(7);
+      prisma.service.count
+        .mockResolvedValueOnce(40)
+        .mockResolvedValueOnce(38)
+        .mockResolvedValueOnce(2)
+        .mockResolvedValueOnce(5)
+        .mockResolvedValueOnce(3);
+      prisma.serviceRequirement.count.mockResolvedValue(12);
+      prisma.serviceCategory.findMany.mockResolvedValue([
+        { ...category, _count: { services: 5 } },
+      ]);
+
+      const result = await service.getAdminCatalogOverview();
+
+      expect(result).toMatchObject({
+        categoriesTotal: 8,
+        categoriesActive: 7,
+        servicesTotal: 40,
+        servicesActive: 38,
+        servicesInactive: 2,
+        servicesAdult: 5,
+        requirementsActive: 12,
+        byCategory: [
+          expect.objectContaining({
+            id: 'c1',
+            servicesCount: 5,
+          }),
+        ],
+      });
+      expect(result.attention).toEqual([
+        {
+          code: 'missingDescription',
+          label: 'Description courte manquante',
+          count: 3,
+        },
+      ]);
+    });
+
+    it('adminListCategories applies case-insensitive search on name and slug', async () => {
+      prisma.serviceCategory.findMany.mockResolvedValue([]);
+      await service.adminListCategories({ search: 'mai' });
+      expect(prisma.serviceCategory.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            OR: [
+              { name: { contains: 'mai', mode: 'insensitive' } },
+              { slug: { contains: 'mai', mode: 'insensitive' } },
+            ],
+          },
+        }),
+      );
+    });
+
+    it('adminListServices filters by status inactive', async () => {
+      prisma.service.count.mockResolvedValue(0);
+      prisma.service.findMany.mockResolvedValue([]);
+      await service.adminListServices({
+        status: 'inactive',
+        page: 1,
+        pageSize: 20,
+      });
+      expect(prisma.service.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { isActive: false },
+        }),
+      );
+    });
+
+    it('adminListServices applies search on name and slug', async () => {
+      prisma.service.count.mockResolvedValue(0);
+      prisma.service.findMany.mockResolvedValue([]);
+      await service.adminListServices({ search: 'plomb' });
+      expect(prisma.service.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            OR: [
+              { name: { contains: 'plomb', mode: 'insensitive' } },
+              { slug: { contains: 'plomb', mode: 'insensitive' } },
+            ],
+          },
+        }),
+      );
+    });
+
+    it('adminGetCategoryById throws NotFound when missing', async () => {
+      prisma.serviceCategory.findUnique.mockResolvedValue(null);
+      await expect(
+        service.adminGetCategoryById('missing'),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('adminGetServiceById throws NotFound when missing', async () => {
+      prisma.service.findUnique.mockResolvedValue(null);
+      await expect(
+        service.adminGetServiceById('missing'),
       ).rejects.toBeInstanceOf(NotFoundException);
     });
   });

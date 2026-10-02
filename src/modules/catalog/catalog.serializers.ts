@@ -1,8 +1,15 @@
 import type {
+  DocumentType,
   Service,
   ServiceCategory,
   ServiceRequirement,
 } from '@prisma/client';
+
+export type DocumentTypeBrief = {
+  id: string;
+  code: string;
+  name: string;
+};
 
 export type CategoryResponse = {
   id: string;
@@ -13,6 +20,7 @@ export type CategoryResponse = {
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
+  servicesCount?: number;
 };
 
 export type RequirementResponse = {
@@ -28,12 +36,13 @@ export type RequirementResponse = {
   configuration: unknown;
   createdAt: string;
   updatedAt: string;
+  documentType?: DocumentTypeBrief;
 };
 
 export type ServiceResponse = {
   id: string;
   categoryId: string;
-  category?: { id: string; slug: string; name: string };
+  category?: CategoryResponse | { id: string; slug: string; name: string };
   name: string;
   slug: string;
   shortDescription: string | null;
@@ -43,9 +52,61 @@ export type ServiceResponse = {
   requirements?: RequirementResponse[];
   createdAt: string;
   updatedAt: string;
+  jobberCount?: number;
+  requirementsCount?: number;
 };
 
-export function serializeCategory(category: ServiceCategory): CategoryResponse {
+export type AdminServiceBrief = {
+  id: string;
+  name: string;
+  slug: string;
+  isActive: boolean;
+  minimumAge: number;
+  displayOrder: number;
+};
+
+export type AdminCategoryDetailResponse = CategoryResponse & {
+  servicesCount: number;
+  services: AdminServiceBrief[];
+};
+
+export type DocumentTypeResponse = {
+  id: string;
+  code: string;
+  name: string;
+  description: string | null;
+  isActive: boolean;
+};
+
+export type AdminCatalogOverviewResponse = {
+  categoriesTotal: number;
+  categoriesActive: number;
+  servicesTotal: number;
+  servicesActive: number;
+  servicesInactive: number;
+  servicesAdult: number;
+  requirementsActive: number;
+  byCategory: Array<{
+    id: string;
+    name: string;
+    slug: string;
+    isActive: boolean;
+    servicesCount: number;
+  }>;
+  attention?: Array<{ code: string; label: string; count: number }>;
+};
+
+export type AdminPaginatedServicesResponse = {
+  items: ServiceResponse[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+};
+
+export function serializeCategory(
+  category: ServiceCategory & { _count?: { services: number } },
+): CategoryResponse {
   return {
     id: category.id,
     name: category.name,
@@ -55,11 +116,26 @@ export function serializeCategory(category: ServiceCategory): CategoryResponse {
     isActive: category.isActive,
     createdAt: category.createdAt.toISOString(),
     updatedAt: category.updatedAt.toISOString(),
+    ...(category._count ? { servicesCount: category._count.services } : {}),
+  };
+}
+
+export function serializeDocumentType(
+  documentType: DocumentType,
+): DocumentTypeResponse {
+  return {
+    id: documentType.id,
+    code: documentType.code,
+    name: documentType.name,
+    description: documentType.description,
+    isActive: documentType.isActive,
   };
 }
 
 export function serializeRequirement(
-  requirement: ServiceRequirement,
+  requirement: ServiceRequirement & {
+    documentType?: Pick<DocumentType, 'id' | 'code' | 'name'> | null;
+  },
 ): RequirementResponse {
   return {
     id: requirement.id,
@@ -74,27 +150,43 @@ export function serializeRequirement(
     configuration: requirement.configuration,
     createdAt: requirement.createdAt.toISOString(),
     updatedAt: requirement.updatedAt.toISOString(),
+    ...(requirement.documentType
+      ? {
+          documentType: {
+            id: requirement.documentType.id,
+            code: requirement.documentType.code,
+            name: requirement.documentType.name,
+          },
+        }
+      : {}),
   };
 }
 
 export function serializeService(
   service: Service & {
-    category?: Pick<ServiceCategory, 'id' | 'slug' | 'name'> | null;
-    requirements?: ServiceRequirement[];
+    category?:
+      Pick<ServiceCategory, 'id' | 'slug' | 'name'> | ServiceCategory | null;
+    requirements?: (ServiceRequirement & {
+      documentType?: Pick<DocumentType, 'id' | 'code' | 'name'> | null;
+    })[];
+    _count?: { jobberServices: number; requirements: number };
   },
+  options: { fullCategory?: boolean } = {},
 ): ServiceResponse {
+  const categoryPayload = service.category
+    ? options.fullCategory && 'createdAt' in service.category
+      ? serializeCategory(service.category)
+      : {
+          id: service.category.id,
+          slug: service.category.slug,
+          name: service.category.name,
+        }
+    : undefined;
+
   return {
     id: service.id,
     categoryId: service.categoryId,
-    ...(service.category
-      ? {
-          category: {
-            id: service.category.id,
-            slug: service.category.slug,
-            name: service.category.name,
-          },
-        }
-      : {}),
+    ...(categoryPayload ? { category: categoryPayload } : {}),
     name: service.name,
     slug: service.slug,
     shortDescription: service.shortDescription,
@@ -106,5 +198,27 @@ export function serializeService(
       : {}),
     createdAt: service.createdAt.toISOString(),
     updatedAt: service.updatedAt.toISOString(),
+    ...(service._count
+      ? {
+          jobberCount: service._count.jobberServices,
+          requirementsCount: service._count.requirements,
+        }
+      : {}),
+  };
+}
+
+export function toAdminServiceBrief(
+  service: Pick<
+    Service,
+    'id' | 'name' | 'slug' | 'isActive' | 'minimumAge' | 'displayOrder'
+  >,
+): AdminServiceBrief {
+  return {
+    id: service.id,
+    name: service.name,
+    slug: service.slug,
+    isActive: service.isActive,
+    minimumAge: service.minimumAge,
+    displayOrder: service.displayOrder,
   };
 }

@@ -7,13 +7,22 @@ import {
 import {
   MissionActorType,
   MissionApplicationStatus,
+  MissionAssignmentStatus,
+  MissionRejectionReason,
+  MissionReviewChangeArea,
   MissionStatus,
   type Mission,
   type Prisma,
 } from '@prisma/client';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import type { CancelMissionDto } from './dto/cancel-mission.dto';
+import { assertUserCanOperateAsClient } from '../verifications/operational-gates';
+import {
+  derivePricingFromMission,
+  KINGJOBS_COMMISSION_BPS,
+} from './mission-pricing';
 import { computeMinimumAge } from './mission-rules';
+import { computeStaffing } from './mission-staffing';
 
 export type Tx = Prisma.TransactionClient;
 
@@ -25,24 +34,38 @@ export type Tx = Prisma.TransactionClient;
 export const MISSION_TRANSITIONS: Readonly<
   Record<MissionStatus, readonly MissionStatus[]>
 > = {
-  [MissionStatus.DRAFT]: [MissionStatus.PUBLISHED, MissionStatus.CANCELLED],
+  [MissionStatus.DRAFT]: [MissionStatus.PAYMENT_REQUIRED, MissionStatus.CANCELLED],
+  [MissionStatus.PAYMENT_REQUIRED]: [
+    MissionStatus.PENDING_REVIEW,
+    MissionStatus.CONFIRMED,
+    MissionStatus.CANCELLED,
+    MissionStatus.DISPUTED,
+  ],
+  [MissionStatus.PENDING_REVIEW]: [
+    MissionStatus.PUBLISHED,
+    MissionStatus.NEEDS_CHANGES,
+    MissionStatus.REJECTED,
+  ],
+  [MissionStatus.NEEDS_CHANGES]: [
+    MissionStatus.PENDING_REVIEW,
+    MissionStatus.CANCELLED,
+  ],
+  [MissionStatus.REJECTED]: [],
   [MissionStatus.PUBLISHED]: [
     MissionStatus.APPLICATION_SELECTED,
     MissionStatus.CANCELLED,
   ],
   [MissionStatus.APPLICATION_SELECTED]: [
     MissionStatus.PAYMENT_REQUIRED,
-    MissionStatus.CANCELLED,
-    MissionStatus.DISPUTED,
-  ],
-  [MissionStatus.PAYMENT_REQUIRED]: [
     MissionStatus.CONFIRMED,
+    MissionStatus.PUBLISHED,
     MissionStatus.CANCELLED,
     MissionStatus.DISPUTED,
   ],
   [MissionStatus.CONFIRMED]: [
     MissionStatus.READY_TO_START,
     MissionStatus.IN_PROGRESS,
+    MissionStatus.PUBLISHED,
     MissionStatus.CANCELLED,
     MissionStatus.DISPUTED,
   ],
@@ -80,9 +103,11 @@ export function assertTransition(from: MissionStatus, to: MissionStatus) {
 /** Statuts dans lesquels le Client peut annuler. */
 const CLIENT_CANCELLABLE: ReadonlySet<MissionStatus> = new Set([
   MissionStatus.DRAFT,
+  MissionStatus.PAYMENT_REQUIRED,
+  MissionStatus.PENDING_REVIEW,
+  MissionStatus.NEEDS_CHANGES,
   MissionStatus.PUBLISHED,
   MissionStatus.APPLICATION_SELECTED,
-  MissionStatus.PAYMENT_REQUIRED,
   MissionStatus.CONFIRMED,
   MissionStatus.READY_TO_START,
 ]);
@@ -113,8 +138,8 @@ export class MissionLifecycleService {
 
   // ---------- Transitions publiques ----------
 
-  /** DRAFT → PUBLISHED (rafraîchit snapshots et minimumAge si le service est toujours actif). */
-  async publish(
+  /** DRAFT → PAYMENT_REQUIRED (soumission avant paiement publication). */
+  async submitForPayment(
     missionId: string,
     clientUserId: string,
     tx?: Tx,
@@ -122,6 +147,77 @@ export class MissionLifecycleService {
     return this.run(tx, async (db) => {
       const mission = await this.load(db, missionId);
       this.assertOwner(mission, clientUserId);
+      assertTransition(mission.status, MissionStatus.PAYMENT_REQUIRED);
+
+      const client = await db.user.findUnique({
+        where: { id: clientUserId },
+        select: {
+          status: true,
+          identityVerificationStatus: true,
+          legalGuardianStatus: true,
+        },
+      });
+      assertUserCanOperateAsClient(client);
+
+      await this.applyTransition(db, {
+        mission,
+        to: MissionStatus.PAYMENT_REQUIRED,
+        actorUserId: clientUserId,
+        actorType: MissionActorType.CLIENT,
+        where: { clientUserId },
+        reason: 'Soumission pour paiement',
+      });
+      return this.reload(db, missionId);
+    });
+  }
+
+  /** NEEDS_CHANGES → PENDING_REVIEW (sans repaiement). */
+  async resubmitForReview(
+    missionId: string,
+    clientUserId: string,
+    tx?: Tx,
+  ): Promise<Mission> {
+    return this.run(tx, async (db) => {
+      const mission = await this.load(db, missionId);
+      this.assertOwner(mission, clientUserId);
+      assertTransition(mission.status, MissionStatus.PENDING_REVIEW);
+
+      const client = await db.user.findUnique({
+        where: { id: clientUserId },
+        select: {
+          status: true,
+          identityVerificationStatus: true,
+          legalGuardianStatus: true,
+        },
+      });
+      assertUserCanOperateAsClient(client);
+
+      await this.applyTransition(db, {
+        mission,
+        to: MissionStatus.PENDING_REVIEW,
+        actorUserId: clientUserId,
+        actorType: MissionActorType.CLIENT,
+        where: { clientUserId },
+        reason: 'Resoumission après corrections',
+        data: {
+          submittedForReviewAt: new Date(),
+          clientReviewMessage: null,
+          reviewChangeAreas: [],
+        },
+      });
+      return this.reload(db, missionId);
+    });
+  }
+
+  /** PENDING_REVIEW → PUBLISHED (décision Admin). */
+  async approveForPublication(
+    missionId: string,
+    adminUserId: string,
+    internalNote?: string | null,
+    tx?: Tx,
+  ): Promise<Mission> {
+    return this.run(tx, async (db) => {
+      const mission = await this.load(db, missionId);
       assertTransition(mission.status, MissionStatus.PUBLISHED);
 
       const service = await db.service.findUnique({
@@ -135,16 +231,15 @@ export class MissionLifecycleService {
       }
       if (mission.scheduledStartAt && mission.scheduledStartAt <= new Date()) {
         throw new ConflictException(
-          'La date de début prévue est passée : modifiez-la avant de publier.',
+          'La date de début prévue est passée : modifiez-la avant publication.',
         );
       }
 
       await this.applyTransition(db, {
         mission,
         to: MissionStatus.PUBLISHED,
-        actorUserId: clientUserId,
-        actorType: MissionActorType.CLIENT,
-        where: { clientUserId },
+        actorUserId: adminUserId,
+        actorType: MissionActorType.ADMIN,
         data: {
           publishedAt: new Date(),
           serviceNameSnapshot: service.name,
@@ -152,6 +247,71 @@ export class MissionLifecycleService {
           categoryNameSnapshot: service.category.name,
           categorySlugSnapshot: service.category.slug,
           minimumAge: computeMinimumAge(service.minimumAge, mission.riskFlags),
+          reviewInternalNote: internalNote?.trim() || mission.reviewInternalNote,
+        },
+      });
+      return this.reload(db, missionId);
+    });
+  }
+
+  async requestMissionChanges(
+    missionId: string,
+    adminUserId: string,
+    input: {
+      message: string;
+      areas: MissionReviewChangeArea[];
+      internalNote?: string | null;
+    },
+    tx?: Tx,
+  ): Promise<Mission> {
+    return this.run(tx, async (db) => {
+      const mission = await this.load(db, missionId);
+      assertTransition(mission.status, MissionStatus.NEEDS_CHANGES);
+      await this.applyTransition(db, {
+        mission,
+        to: MissionStatus.NEEDS_CHANGES,
+        actorUserId: adminUserId,
+        actorType: MissionActorType.ADMIN,
+        reason: input.message,
+        metadata: { areas: input.areas },
+        data: {
+          clientReviewMessage: input.message,
+          reviewChangeAreas: input.areas,
+          reviewInternalNote:
+            input.internalNote?.trim() || mission.reviewInternalNote,
+        },
+      });
+      return this.reload(db, missionId);
+    });
+  }
+
+  async rejectMission(
+    missionId: string,
+    adminUserId: string,
+    input: {
+      reasonCode: MissionRejectionReason;
+      reasonText: string;
+      internalNote?: string | null;
+      financialFollowUp: boolean;
+    },
+    tx?: Tx,
+  ): Promise<Mission> {
+    return this.run(tx, async (db) => {
+      const mission = await this.load(db, missionId);
+      assertTransition(mission.status, MissionStatus.REJECTED);
+      await this.applyTransition(db, {
+        mission,
+        to: MissionStatus.REJECTED,
+        actorUserId: adminUserId,
+        actorType: MissionActorType.ADMIN,
+        reason: input.reasonText,
+        metadata: { reasonCode: input.reasonCode },
+        data: {
+          rejectionReasonCode: input.reasonCode,
+          rejectionReasonText: input.reasonText,
+          reviewInternalNote:
+            input.internalNote?.trim() || mission.reviewInternalNote,
+          financialFollowUpRequired: input.financialFollowUp,
         },
       });
       return this.reload(db, missionId);
@@ -159,9 +319,13 @@ export class MissionLifecycleService {
   }
 
   /**
-   * PUBLISHED → APPLICATION_SELECTED → PAYMENT_REQUIRED, dans UNE transaction.
-   * Le verrou est un updateMany conditionnel (status PUBLISHED, aucun Jobber déjà choisi) :
-   * deux sélections concurrentes → une seule passe (count === 1), l'autre reçoit 409.
+   * Sélection multi-Jobber (BO05).
+   * - Crée MissionAssignment ACTIVE + snapshot financier.
+   * - Mission reste PUBLISHED tant qu'il reste des places.
+   * - Dernière place : clôture PENDING → MISSION_FILLED, puis PUBLISHED → APPLICATION_SELECTED → CONFIRMED
+   *   (paiement publication déjà fait ; JAMAIS PAYMENT_REQUIRED post-sélection BO04+).
+   * - Concurrence : SELECT FOR UPDATE + partial unique index ACTIVE.
+   * - Idempotence : re-select d'une candidature déjà SELECTED avec assignment ACTIVE → no-op.
    */
   async selectApplication(
     missionId: string,
@@ -170,14 +334,326 @@ export class MissionLifecycleService {
     tx?: Tx,
   ): Promise<Mission> {
     return this.run(tx, async (db) => {
+      await db.$executeRaw`
+        SELECT id FROM missions WHERE id = ${missionId}::uuid FOR UPDATE
+      `;
+
       const mission = await this.load(db, missionId);
       this.assertOwner(mission, clientUserId);
 
       if (mission.status !== MissionStatus.PUBLISHED) {
         throw new ConflictException(
-          'Un Jobber ne peut être sélectionné que sur une mission publiée.',
+          'Un Jobber ne peut être sélectionné que sur une mission publiée en recrutement.',
         );
       }
+
+      const application = await db.missionApplication.findUnique({
+        where: { id: applicationId },
+        include: { assignment: true },
+      });
+      if (!application || application.missionId !== missionId) {
+        throw new NotFoundException('Candidature introuvable');
+      }
+
+      // Idempotence : déjà sélectionné avec affectation active.
+      if (
+        application.status === MissionApplicationStatus.SELECTED &&
+        application.assignment?.status === MissionAssignmentStatus.ACTIVE
+      ) {
+        return this.reload(db, missionId);
+      }
+
+      if (application.status !== MissionApplicationStatus.PENDING) {
+        throw new ConflictException(
+          'Cette candidature n’est plus sélectionnable.',
+        );
+      }
+
+      const activeCount = await db.missionAssignment.count({
+        where: { missionId, status: MissionAssignmentStatus.ACTIVE },
+      });
+      const staffing = computeStaffing(mission.workersNeeded, activeCount);
+      if (staffing.isFull) {
+        throw new ConflictException(
+          'Toutes les places de cette mission sont déjà pourvues.',
+        );
+      }
+
+      const existingActiveForJobber = await db.missionAssignment.findFirst({
+        where: {
+          missionId,
+          jobberUserId: application.jobberUserId,
+          status: MissionAssignmentStatus.ACTIVE,
+        },
+      });
+      if (existingActiveForJobber) {
+        throw new ConflictException(
+          'Ce Jobber est déjà affecté à cette mission.',
+        );
+      }
+
+      const now = new Date();
+      let workerGrossAmount = mission.clientPriceAmount;
+      try {
+        workerGrossAmount = derivePricingFromMission({
+          pricingType: mission.pricingType,
+          rateAmount: mission.rateAmount,
+          rateScope: mission.rateScope,
+          clientPriceAmount: mission.clientPriceAmount,
+          estimatedAmount: mission.estimatedAmount,
+          workersNeeded: mission.workersNeeded,
+          estimatedDurationMinutes: mission.estimatedDurationMinutes,
+          durationKnown: mission.durationKnown,
+          schedulingType: mission.schedulingType,
+        }).workerGrossAmount;
+      } catch {
+        // Snapshot best-effort : total / workers si divisible.
+        if (
+          mission.workersNeeded > 1 &&
+          mission.clientPriceAmount % mission.workersNeeded === 0
+        ) {
+          workerGrossAmount =
+            mission.clientPriceAmount / mission.workersNeeded;
+        }
+      }
+
+      const selected = await db.missionApplication.updateMany({
+        where: {
+          id: applicationId,
+          missionId,
+          status: MissionApplicationStatus.PENDING,
+        },
+        data: {
+          status: MissionApplicationStatus.SELECTED,
+          selectedAt: now,
+        },
+      });
+      if (selected.count !== 1) {
+        throw new ConflictException(
+          'Cette candidature n’est plus disponible (retirée ?).',
+        );
+      }
+
+      await db.missionAssignment.create({
+        data: {
+          missionId,
+          jobberUserId: application.jobberUserId,
+          applicationId,
+          status: MissionAssignmentStatus.ACTIVE,
+          selectedAt: now,
+          selectedByUserId: clientUserId,
+          workerGrossAmount,
+          commissionRateBps: KINGJOBS_COMMISSION_BPS,
+          currency: mission.currency,
+        },
+      });
+
+      const newFilled = activeCount + 1;
+      const afterStaffing = computeStaffing(mission.workersNeeded, newFilled);
+
+      // Synchro legacy selectedJobberUserId (premier ACTIVE) pour START/END V1.
+      if (!mission.selectedJobberUserId) {
+        await db.mission.update({
+          where: { id: missionId },
+          data: {
+            selectedJobberUserId: application.jobberUserId,
+            assignedAt: mission.assignedAt ?? now,
+          },
+        });
+      }
+
+      if (!afterStaffing.isFull) {
+        return this.reload(db, missionId);
+      }
+
+      // Mission pleine : clôturer les PENDING restants (pas un rejet personnel).
+      await db.missionApplication.updateMany({
+        where: {
+          missionId,
+          status: MissionApplicationStatus.PENDING,
+        },
+        data: {
+          status: MissionApplicationStatus.MISSION_FILLED,
+          closedAt: now,
+        },
+      });
+
+      const current = await this.load(db, missionId);
+      await this.applyTransition(db, {
+        mission: current,
+        to: MissionStatus.APPLICATION_SELECTED,
+        actorUserId: clientUserId,
+        actorType: MissionActorType.CLIENT,
+        reason: 'Effectif Mission complet',
+        metadata: {
+          applicationId,
+          filledWorkers: afterStaffing.filledWorkers,
+          workersNeeded: afterStaffing.workersNeeded,
+        },
+        data: {
+          assignedAt: current.assignedAt ?? now,
+          selectedJobberUserId:
+            current.selectedJobberUserId ?? application.jobberUserId,
+        },
+      });
+
+      // BO04+ : paiement déjà confirmé avant PUBLISHED → CONFIRMED, jamais PAYMENT_REQUIRED.
+      if (current.paymentConfirmedAt || current.publishedAt) {
+        await this.applyTransition(db, {
+          mission: {
+            id: missionId,
+            status: MissionStatus.APPLICATION_SELECTED,
+          },
+          to: MissionStatus.CONFIRMED,
+          actorUserId: clientUserId,
+          actorType: MissionActorType.SYSTEM,
+          reason: 'Effectif complet (paiement publication déjà confirmé)',
+          data: { confirmedAt: now },
+        });
+      } else {
+        // Legacy rare : mission publiée sans paiement (ne devrait plus arriver).
+        await this.applyTransition(db, {
+          mission: {
+            id: missionId,
+            status: MissionStatus.APPLICATION_SELECTED,
+          },
+          to: MissionStatus.PAYMENT_REQUIRED,
+          actorUserId: clientUserId,
+          actorType: MissionActorType.SYSTEM,
+          reason: 'Legacy : paiement post-sélection (mission sans paymentConfirmedAt)',
+        });
+      }
+
+      return this.reload(db, missionId);
+    });
+  }
+
+  /**
+   * Annule une affectation ACTIVE (désistement Jobber ou annulation Client du slot).
+   * Rouvre une place ; si la Mission était pleine (CONFIRMED/APPLICATION_SELECTED),
+   * retour en PUBLISHED pour accepter de nouvelles candidatures.
+   */
+  async cancelAssignment(input: {
+    missionId: string;
+    assignmentId: string;
+    actorUserId: string;
+    reason?: string | null;
+    asClient?: boolean;
+    tx?: Tx;
+  }): Promise<Mission> {
+    return this.run(input.tx, async (db) => {
+      await db.$executeRaw`
+        SELECT id FROM missions WHERE id = ${input.missionId}::uuid FOR UPDATE
+      `;
+
+      const mission = await this.load(db, input.missionId);
+      const assignment = await db.missionAssignment.findUnique({
+        where: { id: input.assignmentId },
+      });
+      if (!assignment || assignment.missionId !== input.missionId) {
+        throw new NotFoundException('Affectation introuvable');
+      }
+      if (assignment.status !== MissionAssignmentStatus.ACTIVE) {
+        throw new ConflictException('Cette affectation n’est plus active.');
+      }
+
+      const isClient = mission.clientUserId === input.actorUserId;
+      const isJobber = assignment.jobberUserId === input.actorUserId;
+      if (input.asClient) {
+        if (!isClient) {
+          throw new NotFoundException('Affectation introuvable');
+        }
+      } else if (!isJobber && !isClient) {
+        throw new NotFoundException('Affectation introuvable');
+      }
+
+      const cancellableMission =
+        mission.status === MissionStatus.PUBLISHED ||
+        mission.status === MissionStatus.APPLICATION_SELECTED ||
+        mission.status === MissionStatus.CONFIRMED ||
+        mission.status === MissionStatus.READY_TO_START ||
+        mission.status === MissionStatus.PAYMENT_REQUIRED;
+      if (!cancellableMission) {
+        throw new ConflictException(
+          'Cette affectation ne peut plus être annulée à ce stade.',
+        );
+      }
+
+      const now = new Date();
+      const cancelled = await db.missionAssignment.updateMany({
+        where: {
+          id: assignment.id,
+          status: MissionAssignmentStatus.ACTIVE,
+        },
+        data: {
+          status: MissionAssignmentStatus.CANCELLED,
+          cancelledAt: now,
+          cancellationReason: input.reason?.trim() || null,
+        },
+      });
+      if (cancelled.count !== 1) {
+        throw new ConflictException('Cette affectation n’est plus active.');
+      }
+
+      await db.missionApplication.updateMany({
+        where: { id: assignment.applicationId },
+        data: {
+          status: MissionApplicationStatus.ASSIGNMENT_CANCELLED,
+          closedAt: now,
+        },
+      });
+
+      const remainingActive = await db.missionAssignment.findMany({
+        where: { missionId: input.missionId, status: MissionAssignmentStatus.ACTIVE },
+        orderBy: { selectedAt: 'asc' },
+        select: { jobberUserId: true },
+      });
+
+      await db.mission.update({
+        where: { id: input.missionId },
+        data: {
+          selectedJobberUserId: remainingActive[0]?.jobberUserId ?? null,
+          assignedAt: remainingActive.length > 0 ? mission.assignedAt : null,
+        },
+      });
+
+      // Rouvrir le recrutement si une place s'est libérée après remplissage.
+      if (
+        (mission.status === MissionStatus.APPLICATION_SELECTED ||
+          mission.status === MissionStatus.CONFIRMED) &&
+        remainingActive.length < mission.workersNeeded
+      ) {
+        await this.applyTransition(db, {
+          mission,
+          to: MissionStatus.PUBLISHED,
+          actorUserId: input.actorUserId,
+          actorType: isClient
+            ? MissionActorType.CLIENT
+            : MissionActorType.JOBBER,
+          reason: 'Place libérée après annulation d’affectation',
+          metadata: {
+            assignmentId: assignment.id,
+            remainingWorkers:
+              mission.workersNeeded - remainingActive.length,
+          },
+          data: { confirmedAt: null },
+        });
+      }
+
+      return this.reload(db, input.missionId);
+    });
+  }
+
+  /** Client : refuse une candidature PENDING (pas une affectation). */
+  async rejectApplication(
+    missionId: string,
+    applicationId: string,
+    clientUserId: string,
+    tx?: Tx,
+  ): Promise<void> {
+    return this.run(tx, async (db) => {
+      const mission = await this.load(db, missionId);
+      this.assertOwner(mission, clientUserId);
 
       const application = await db.missionApplication.findUnique({
         where: { id: applicationId },
@@ -187,70 +663,34 @@ export class MissionLifecycleService {
       }
       if (application.status !== MissionApplicationStatus.PENDING) {
         throw new ConflictException(
-          'Cette candidature n’est plus sélectionnable.',
+          'Seule une candidature en attente peut être refusée.',
         );
       }
 
       const now = new Date();
-      // 1) Verrou : une seule transaction peut quitter PUBLISHED sans Jobber sélectionné.
-      await this.applyTransition(db, {
-        mission,
-        to: MissionStatus.APPLICATION_SELECTED,
-        actorUserId: clientUserId,
-        actorType: MissionActorType.CLIENT,
-        where: { clientUserId, selectedJobberUserId: null },
-        metadata: {
-          applicationId,
-          selectedJobberUserId: application.jobberUserId,
-        },
-        data: {
-          selectedJobberUserId: application.jobberUserId,
-          assignedAt: now,
-        },
-      });
-
-      // 2) Candidature choisie (garde PENDING → rejette si retirée entre-temps).
-      const selected = await db.missionApplication.updateMany({
+      const updated = await db.missionApplication.updateMany({
         where: {
           id: applicationId,
-          missionId,
           status: MissionApplicationStatus.PENDING,
         },
-        data: { status: MissionApplicationStatus.SELECTED, selectedAt: now },
+        data: {
+          status: MissionApplicationStatus.REJECTED,
+          rejectedAt: now,
+          closedAt: now,
+        },
       });
-      if (selected.count !== 1) {
-        // Annule toute la transaction (verrou inclus).
+      if (updated.count !== 1) {
         throw new ConflictException(
-          'Cette candidature n’est plus disponible (retirée ?).',
+          'Cette candidature ne peut plus être refusée.',
         );
       }
-
-      // 3) Les autres candidatures en attente sont rejetées.
-      await db.missionApplication.updateMany({
-        where: {
-          missionId,
-          id: { not: applicationId },
-          status: MissionApplicationStatus.PENDING,
-        },
-        data: { status: MissionApplicationStatus.REJECTED, rejectedAt: now },
-      });
-
-      // 4) Le paiement est désormais requis (Backend 05 confirmera le paiement).
-      await this.applyTransition(db, {
-        mission: { id: missionId, status: MissionStatus.APPLICATION_SELECTED },
-        to: MissionStatus.PAYMENT_REQUIRED,
-        actorUserId: clientUserId,
-        actorType: MissionActorType.SYSTEM,
-        reason: 'Paiement requis après sélection du Jobber',
-      });
-
-      return this.reload(db, missionId);
     });
   }
 
   /**
-   * PAYMENT_REQUIRED → CONFIRMED. USAGE INTERNE UNIQUEMENT (Backend 05 / tests) :
-   * aucun endpoint HTTP n'expose cette méthode.
+   * Paiement confirmé (interne uniquement, Backend Payment / tests).
+   * - Publication (publishedAt null) : PAYMENT_REQUIRED → PENDING_REVIEW.
+   * - Legacy post-sélection (publishedAt défini) : PAYMENT_REQUIRED → CONFIRMED.
    */
   async markPaymentConfirmed(
     missionId: string,
@@ -259,15 +699,36 @@ export class MissionLifecycleService {
   ): Promise<Mission> {
     return this.run(tx, async (db) => {
       const mission = await this.load(db, missionId);
-      assertTransition(mission.status, MissionStatus.CONFIRMED);
-      await this.applyTransition(db, {
-        mission,
-        to: MissionStatus.CONFIRMED,
-        actorUserId: actorUserId ?? null,
-        actorType: MissionActorType.SYSTEM,
-        reason: 'Paiement confirmé',
-        data: { confirmedAt: new Date() },
-      });
+      if (mission.status !== MissionStatus.PAYMENT_REQUIRED) {
+        throw new ConflictException(
+          'Paiement confirmable uniquement depuis PAYMENT_REQUIRED.',
+        );
+      }
+      const now = new Date();
+      if (mission.publishedAt) {
+        assertTransition(mission.status, MissionStatus.CONFIRMED);
+        await this.applyTransition(db, {
+          mission,
+          to: MissionStatus.CONFIRMED,
+          actorUserId: actorUserId ?? null,
+          actorType: MissionActorType.SYSTEM,
+          reason: 'Paiement confirmé (legacy post-sélection)',
+          data: { confirmedAt: now, paymentConfirmedAt: now },
+        });
+      } else {
+        assertTransition(mission.status, MissionStatus.PENDING_REVIEW);
+        await this.applyTransition(db, {
+          mission,
+          to: MissionStatus.PENDING_REVIEW,
+          actorUserId: actorUserId ?? null,
+          actorType: MissionActorType.SYSTEM,
+          reason: 'Paiement publication confirmé',
+          data: {
+            paymentConfirmedAt: now,
+            submittedForReviewAt: now,
+          },
+        });
+      }
       return this.reload(db, missionId);
     });
   }
@@ -322,10 +783,17 @@ export class MissionLifecycleService {
       const mission = await this.load(db, missionId);
       if (mission.clientUserId === jobberUserId) {
         throw new ForbiddenException(
-          'Seul le Jobber sélectionné peut demander la clôture.',
+          'Seul un Jobber affecté peut demander la clôture.',
         );
       }
-      if (mission.selectedJobberUserId !== jobberUserId) {
+      const assignment = await db.missionAssignment.findFirst({
+        where: {
+          missionId,
+          jobberUserId,
+          status: MissionAssignmentStatus.ACTIVE,
+        },
+      });
+      if (!assignment) {
         throw new NotFoundException('Mission introuvable');
       }
       assertTransition(mission.status, MissionStatus.COMPLETION_PENDING);
@@ -376,9 +844,25 @@ export class MissionLifecycleService {
     return this.run(tx, async (db) => {
       const mission = await this.load(db, missionId);
       const isClient = mission.clientUserId === actorUserId;
-      const isJobber = mission.selectedJobberUserId === actorUserId;
+      const jobberAssignment = isClient
+        ? null
+        : await db.missionAssignment.findFirst({
+            where: {
+              missionId,
+              jobberUserId: actorUserId,
+              status: MissionAssignmentStatus.ACTIVE,
+            },
+          });
+      const isJobber = Boolean(jobberAssignment);
       if (!isClient && !isJobber) {
         throw new NotFoundException('Mission introuvable');
+      }
+
+      // Multi-Jobber : un Jobber annule son slot, pas toute la Mission.
+      if (isJobber && mission.workersNeeded > 1 && jobberAssignment) {
+        throw new ConflictException(
+          'Pour vous désister, annulez votre affectation (pas toute la mission).',
+        );
       }
 
       const allowed = isClient ? CLIENT_CANCELLABLE : JOBBER_CANCELLABLE;
@@ -417,7 +901,31 @@ export class MissionLifecycleService {
 
       await db.missionApplication.updateMany({
         where: { missionId, status: MissionApplicationStatus.PENDING },
-        data: { status: MissionApplicationStatus.REJECTED, rejectedAt: now },
+        data: {
+          status: MissionApplicationStatus.REJECTED,
+          rejectedAt: now,
+          closedAt: now,
+        },
+      });
+
+      await db.missionAssignment.updateMany({
+        where: { missionId, status: MissionAssignmentStatus.ACTIVE },
+        data: {
+          status: MissionAssignmentStatus.CANCELLED,
+          cancelledAt: now,
+          cancellationReason: `Mission cancelled: ${dto.reasonCode}`,
+        },
+      });
+
+      await db.missionApplication.updateMany({
+        where: {
+          missionId,
+          status: MissionApplicationStatus.SELECTED,
+        },
+        data: {
+          status: MissionApplicationStatus.ASSIGNMENT_CANCELLED,
+          closedAt: now,
+        },
       });
 
       return this.reload(db, missionId);

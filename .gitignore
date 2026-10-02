@@ -30,3 +30,6 @@ prisma/*.db-journal
 
 # Test
 .nyc_output/
+
+# Fichiers privés (pièces d'identité) - ne jamais versionner
+.data/

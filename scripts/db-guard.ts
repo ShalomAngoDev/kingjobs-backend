@@ -47,6 +47,9 @@ type Mode =
   | 'migrate-deploy'
   | 'migrate-diff'
   | 'seed-catalog'
+  | 'seed-demo-verifications'
+  | 'seed-demo-missions'
+  | 'seed-demo-applications'
   | 'check-migrations'
   | 'assert-test'
   | 'status';
@@ -56,14 +59,17 @@ function usage(): never {
   console.error(`Usage: ts-node scripts/db-guard.ts <mode> [-- ...prisma args]
 
 Modes:
-  migrate-dev       Guard + prisma migrate dev
-  migrate-reset     Guard (test only) + prisma migrate reset
-  migrate-deploy    Guard env + prisma migrate deploy
-  migrate-diff      Guard shadow + prisma migrate diff
-  seed-catalog      Catalogue reference seed (idempotent, no demo users)
-  check-migrations  Scan SQL for destructive statements
-  assert-test       Fail if DB looks like production
-  status            Print redacted DB safety status
+  migrate-dev              Guard + prisma migrate dev
+  migrate-reset            Guard (test only) + prisma migrate reset
+  migrate-deploy           Guard env + prisma migrate deploy
+  migrate-diff             Guard shadow + prisma migrate diff
+  seed-catalog             Catalogue reference seed (idempotent, no demo users)
+  seed-demo-verifications  Dossiers démo BO03 (interdit en production)
+  seed-demo-missions       Missions démo BO04 (interdit en production)
+  seed-demo-applications   Candidatures / affectations démo BO05 (interdit en production)
+  check-migrations         Scan SQL for destructive statements
+  assert-test              Fail if DB looks like production
+  status                   Print redacted DB safety status
 `);
   process.exit(2);
 }
@@ -188,6 +194,36 @@ function main(): void {
         const result = spawnSync(
           'npx',
           ['ts-node', '--transpile-only', 'prisma/seed.ts'],
+          { stdio: 'inherit', env: process.env, shell: process.platform === 'win32' },
+        );
+        process.exit(result.status ?? 1);
+        return;
+      }
+      case 'seed-demo-verifications': {
+        assertActionAllowed('seed-demo', ctx);
+        const result = spawnSync(
+          'npx',
+          ['ts-node', '--transpile-only', 'prisma/seed-demo-verifications.ts'],
+          { stdio: 'inherit', env: process.env, shell: process.platform === 'win32' },
+        );
+        process.exit(result.status ?? 1);
+        return;
+      }
+      case 'seed-demo-missions': {
+        assertActionAllowed('seed-demo', ctx);
+        const result = spawnSync(
+          'npx',
+          ['ts-node', '--transpile-only', 'prisma/seed-demo-missions.ts'],
+          { stdio: 'inherit', env: process.env, shell: process.platform === 'win32' },
+        );
+        process.exit(result.status ?? 1);
+        return;
+      }
+      case 'seed-demo-applications': {
+        assertActionAllowed('seed-demo', ctx);
+        const result = spawnSync(
+          'npx',
+          ['ts-node', '--transpile-only', 'prisma/seed-demo-applications.ts'],
           { stdio: 'inherit', env: process.env, shell: process.platform === 'win32' },
         );
         process.exit(result.status ?? 1);

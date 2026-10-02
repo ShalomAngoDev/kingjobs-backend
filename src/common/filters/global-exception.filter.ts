@@ -58,9 +58,38 @@ export class GlobalExceptionFilter implements ExceptionFilter {
           Array.isArray(record.message)
         ) {
           message = record.message as string | string[];
+        } else if (
+          record.message &&
+          typeof record.message === 'object' &&
+          record.message !== null &&
+          'message' in (record.message as object) &&
+          typeof (record.message as { message?: unknown }).message === 'string'
+        ) {
+          message = (record.message as { message: string }).message;
         } else if (typeof record.error === 'string') {
           message = record.error;
         }
+
+        const reasons =
+          Array.isArray(record.reasons)
+            ? record.reasons
+            : record.message &&
+                typeof record.message === 'object' &&
+                record.message !== null &&
+                Array.isArray((record.message as { reasons?: unknown }).reasons)
+              ? (record.message as { reasons: unknown[] }).reasons
+              : null;
+
+        response.status(status).json({
+          statusCode: status,
+          error: errorName.replace(/_/g, ' '),
+          message,
+          ...(reasons ? { reasons } : {}),
+          path: request.url,
+          timestamp: new Date().toISOString(),
+          ...(request.requestId ? { requestId: request.requestId } : {}),
+        });
+        return;
       }
     }
 

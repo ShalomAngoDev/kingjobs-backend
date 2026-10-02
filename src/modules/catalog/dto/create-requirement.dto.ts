@@ -17,20 +17,28 @@ export class CreateRequirementDto {
   @IsEnum(ServiceRequirementType)
   type!: ServiceRequirementType;
 
-  @ApiProperty({ maxLength: 80, example: 'MINIMUM_AGE_18' })
+  @ApiPropertyOptional({
+    maxLength: 80,
+    description: 'Optionnel pour DOCUMENT (dérivé du DocumentType)',
+  })
+  @IsOptional()
   @IsString()
   @MinLength(1)
   @MaxLength(80)
   @Matches(/^[A-Za-z0-9_.-]+$/, {
     message: 'Le code ne doit contenir que lettres, chiffres, _ . -',
   })
-  code!: string;
+  code?: string;
 
-  @ApiProperty({ maxLength: 200 })
+  @ApiPropertyOptional({
+    maxLength: 200,
+    description: 'Optionnel pour DOCUMENT (reprend le nom du DocumentType)',
+  })
+  @IsOptional()
   @IsString()
   @MinLength(1)
   @MaxLength(200)
-  label!: string;
+  label?: string;
 
   @ApiPropertyOptional({ maxLength: 500 })
   @IsOptional()

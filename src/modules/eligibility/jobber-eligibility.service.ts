@@ -40,6 +40,11 @@ type EligibilityContext = {
       'type' | 'code' | 'label' | 'isRequired' | 'isActive' | 'documentTypeId'
     >
   >;
+  /**
+   * DocumentType.id déjà APPROVED pour l'utilisateur.
+   * Satisfait les exigences DOCUMENT obligatoires (éligibilité par service).
+   */
+  approvedDocumentTypeIds?: ReadonlySet<string>;
   now?: Date;
 };
 
@@ -55,7 +60,9 @@ export class JobberEligibilityService {
   evaluate(ctx: EligibilityContext): EligibilityResult {
     const reasons: EligibilityReason[] = [];
     const now = ctx.now ?? new Date();
-    const age = calculateAge(ctx.user.dateOfBirth, now);
+    const age = ctx.user.dateOfBirth
+      ? calculateAge(ctx.user.dateOfBirth, now)
+      : null;
 
     if (ctx.user.status !== UserStatus.ACTIVE) {
       reasons.push({
@@ -81,10 +88,13 @@ export class JobberEligibilityService {
       });
     }
 
-    if (age < ctx.service.minimumAge) {
+    if (age === null || age < ctx.service.minimumAge) {
       reasons.push({
         code: 'MINIMUM_AGE_NOT_MET',
-        message: `L’âge minimum requis pour ce service (${ctx.service.minimumAge} ans) n’est pas atteint.`,
+        message:
+          age === null
+            ? 'La date de naissance est requise pour vérifier l’âge minimum de ce service.'
+            : `L’âge minimum requis pour ce service (${ctx.service.minimumAge} ans) n’est pas atteint.`,
       });
     }
 
@@ -94,7 +104,7 @@ export class JobberEligibilityService {
     for (const requirement of activeRequirements) {
       if (
         requirement.type === ServiceRequirementType.MINIMUM_AGE &&
-        age < ctx.service.minimumAge
+        (age === null || age < ctx.service.minimumAge)
       ) {
         // déjà couvert via service.minimumAge
         continue;
@@ -115,8 +125,26 @@ export class JobberEligibilityService {
         continue;
       }
 
+      if (requirement.type === ServiceRequirementType.DOCUMENT) {
+        if (!requirement.isRequired) {
+          continue;
+        }
+        const approved = Boolean(
+          requirement.documentTypeId &&
+            ctx.approvedDocumentTypeIds?.has(requirement.documentTypeId),
+        );
+        if (approved) {
+          continue;
+        }
+        hasPendingRequirement = true;
+        reasons.push({
+          code: 'DOCUMENT_REQUIREMENT_MISSING',
+          message: `Un document est requis pour proposer vos services comme ${ctx.service.name} : ${requirement.label}.`,
+        });
+        continue;
+      }
+
       if (
-        requirement.type === ServiceRequirementType.DOCUMENT ||
         requirement.type === ServiceRequirementType.QUALIFICATION ||
         requirement.type === ServiceRequirementType.MANUAL_APPROVAL
       ) {
@@ -126,7 +154,7 @@ export class JobberEligibilityService {
         hasPendingRequirement = true;
         reasons.push({
           code: 'PENDING_REQUIREMENT',
-          message: `Exigence non encore vérifiable : ${requirement.label} (${requirement.code}).`,
+          message: `Exigence non encore vérifiable : ${requirement.label}.`,
         });
       }
     }

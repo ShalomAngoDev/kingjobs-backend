@@ -1,7 +1,7 @@
 import { BadRequestException } from '@nestjs/common';
 import * as argon2 from 'argon2';
 
-const MIN_LENGTH = 10;
+const MIN_LENGTH = 8;
 const MAX_LENGTH = 128;
 
 export function validatePasswordPolicy(password: string): void {

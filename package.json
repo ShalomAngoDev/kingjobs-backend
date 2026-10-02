@@ -33,6 +33,9 @@
     "db:test:reset": "ts-node --transpile-only scripts/db-guard.ts migrate-reset",
     "db:prod:deploy": "ts-node --transpile-only scripts/db-guard.ts migrate-deploy",
     "db:seed": "ts-node --transpile-only scripts/db-guard.ts seed-catalog",
+    "db:seed:demo:verifications": "ts-node --transpile-only scripts/db-guard.ts seed-demo-verifications",
+    "db:seed:demo:missions": "ts-node --transpile-only scripts/db-guard.ts seed-demo-missions",
+    "db:seed:demo:applications": "ts-node --transpile-only scripts/db-guard.ts seed-demo-applications",
     "db:diff": "ts-node --transpile-only scripts/db-guard.ts migrate-diff",
     "admin:promote": "ts-node --transpile-only scripts/admin-promote.ts",
     "prisma:migrate:dev": "npm run db:dev:migrate --",
@@ -40,6 +43,8 @@
     "prisma:seed": "npm run db:seed"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.901.0",
+    "@aws-sdk/s3-request-presigner": "^3.901.0",
     "@nestjs/common": "^11.0.1",
     "@nestjs/config": "^4.0.2",
     "@nestjs/core": "^11.0.1",

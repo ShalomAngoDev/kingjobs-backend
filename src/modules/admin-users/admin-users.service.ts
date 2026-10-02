@@ -18,6 +18,7 @@ import type { AuthenticatedUser } from '../auth/auth.types';
 import { SessionsService } from '../auth/sessions.service';
 import { JobberEligibilityService } from '../eligibility/jobber-eligibility.service';
 import { JobberProfileCompletionService } from '../eligibility/jobber-profile-completion.service';
+import { JobberServiceEligibilitySync } from '../eligibility/jobber-service-eligibility-sync.service';
 import {
   ADMIN_LIST_DEFAULT_LIMIT,
   type AdminClientsQueryDto,
@@ -33,6 +34,10 @@ import {
   toJobberSummary,
   toSuspensionInfo,
 } from './admin-users.serializers';
+import {
+  avatarUrlFromProfilePhotoId,
+  loadApprovedProfilePhotoIds,
+} from '../verifications/profile-photo';
 
 /** Statuts de mission considérés « actifs » (confirmée → en cours de clôture). */
 export const ACTIVE_MISSION_STATUSES: readonly MissionStatus[] = [
@@ -57,6 +62,7 @@ export class AdminUsersService {
     private readonly sessions: SessionsService,
     private readonly eligibility: JobberEligibilityService,
     private readonly completion: JobberProfileCompletionService,
+    private readonly eligibilitySync: JobberServiceEligibilitySync,
   ) {}
 
   // ---------------------------------------------------------------- dashboard
@@ -126,8 +132,15 @@ export class AdminUsersService {
     }
 
     const { rows, total, page, limit } = await this.queryUsers(query, and);
+    const avatars = await loadApprovedProfilePhotoIds(
+      this.prisma,
+      rows.map((user) => user.id),
+    );
     return paginate(
-      rows.map((user) => toAdminUserItem(user)),
+      rows.map((user) => ({
+        ...toAdminUserItem(user),
+        avatarUrl: avatarUrlFromProfilePhotoId(avatars.get(user.id)),
+      })),
       page,
       limit,
       total,
@@ -145,9 +158,12 @@ export class AdminUsersService {
       ? await this.prisma.mission.count({ where: { clientUserId: id } })
       : 0;
 
+    const avatars = await loadApprovedProfilePhotoIds(this.prisma, [id]);
+
     return {
       ...toAdminUserItem(user),
       ...toSuspensionInfo(user),
+      avatarUrl: avatarUrlFromProfilePhotoId(avatars.get(id)),
       clientProfile: user.clientProfile
         ? {
             id: user.clientProfile.id,
@@ -178,11 +194,17 @@ export class AdminUsersService {
       counts.map((row) => [row.clientUserId, row._count._all]),
     );
 
+    const avatars = await loadApprovedProfilePhotoIds(
+      this.prisma,
+      rows.map((user) => user.id),
+    );
+
     return paginate(
       rows.map((user) => ({
         ...toAdminUserItem(user),
         clientProfileId: user.clientProfile?.id ?? null,
         missionsCount: missionsByClient.get(user.id) ?? 0,
+        avatarUrl: avatarUrlFromProfilePhotoId(avatars.get(user.id)),
       })),
       page,
       limit,
@@ -207,6 +229,10 @@ export class AdminUsersService {
     }
 
     const { rows, total, page, limit } = await this.queryUsers(query, and);
+    const avatars = await loadApprovedProfilePhotoIds(
+      this.prisma,
+      rows.map((user) => user.id),
+    );
     return paginate(
       rows.map((user) => {
         const summary = toJobberSummary(user, this.completion);
@@ -218,6 +244,7 @@ export class AdminUsersService {
           servicesCount: summary?.servicesCount ?? 0,
           zonesCount: summary?.zonesCount ?? 0,
           profileCompletion: summary?.profileCompletion ?? null,
+          avatarUrl: avatarUrlFromProfilePhotoId(avatars.get(user.id)),
         };
       }),
       page,
@@ -254,12 +281,17 @@ export class AdminUsersService {
     }
     const profile = user.jobberProfile;
 
+    const approvedDocumentTypeIds =
+      await this.eligibilitySync.loadApprovedDocumentTypeIds(user.id);
+    const avatars = await loadApprovedProfilePhotoIds(this.prisma, [user.id]);
+
     const services = profile.services.map((js) => {
       const result = this.eligibility.evaluate({
         user,
         jobber: profile,
         service: js.service,
         requirements: js.service.requirements,
+        approvedDocumentTypeIds,
       });
       return {
         id: js.id,
@@ -287,6 +319,7 @@ export class AdminUsersService {
     return {
       ...toAdminUserItem(user),
       ...toSuspensionInfo(user),
+      avatarUrl: avatarUrlFromProfilePhotoId(avatars.get(user.id)),
       jobberProfile: toJobberSummary(user, this.completion),
       services,
       eligibility: {

@@ -110,6 +110,36 @@ class Table {
         this.db.table('jobberProfile').rows.find((p) => p.userId === row.id) ??
         null;
     }
+    if (this.name === 'missionApplication' && args?.include?.assignment) {
+      copy.assignment =
+        this.db
+          .table('missionAssignment')
+          .rows.find((a) => a.applicationId === row.id) ?? null;
+    }
+    if (this.name === 'missionApplication' && args?.include?.mission) {
+      copy.mission =
+        this.db.table('mission').rows.find((m) => m.id === row.missionId) ??
+        null;
+    }
+    if (this.name === 'missionAssignment' && args?.include?.mission) {
+      copy.mission =
+        this.db.table('mission').rows.find((m) => m.id === row.missionId) ??
+        null;
+    }
+    if (this.name === 'mission' && args?.include?.client) {
+      const client =
+        this.db.table('user').rows.find((u) => u.id === row.clientUserId) ??
+        null;
+      if (client && isPlainObject(args.include.client.select)) {
+        const selected: Row = {};
+        for (const [key, enabled] of Object.entries(args.include.client.select)) {
+          if (enabled) selected[key] = client[key];
+        }
+        copy.client = selected;
+      } else {
+        copy.client = client;
+      }
+    }
     void args;
     return copy;
   }
@@ -188,6 +218,17 @@ class Table {
     return Promise.resolve({ ...row });
   };
 
+  createMany = (args: { data: Row[] }) => {
+    for (const data of args.data) void this.create({ data });
+    return Promise.resolve({ count: args.data.length });
+  };
+
+  deleteMany = (args: { where?: Where } = {}) => {
+    const before = this.rows.length;
+    this.rows = this.rows.filter((r) => !matches(r, args.where));
+    return Promise.resolve({ count: before - this.rows.length });
+  };
+
   updateMany = (args: { where?: Where; data: Row }) => {
     const targets = this.rows.filter((r) => matches(r, args.where));
     for (const row of targets) this.apply(row, args.data);
@@ -207,7 +248,14 @@ class Table {
 }
 
 const TABLE_DEFAULTS: Record<string, () => Row> = {
-  user: () => ({}),
+  user: () => ({
+    identityVerificationStatus: 'UNVERIFIED',
+    legalGuardianStatus: 'NOT_REQUIRED',
+    countryCode: 'BJ',
+    addressLine: null,
+    city: null,
+    administrativeArea: null,
+  }),
   clientProfile: () => ({}),
   jobberProfile: () => ({ status: 'ACTIVE' }),
   jobberService: () => ({ status: 'ELIGIBLE' }),
@@ -220,10 +268,30 @@ const TABLE_DEFAULTS: Record<string, () => Row> = {
     currency: 'XOF',
     district: null,
     addressLine: null,
+    locationNotes: null,
     latitude: null,
     longitude: null,
+    schedulingType: 'ONCE',
+    scheduleStartDate: null,
+    scheduleEndDate: null,
+    scheduleSameHoursDaily: null,
+    selectedWeekdays: [],
+    durationKnown: true,
     scheduledStartAt: null,
     estimatedDurationMinutes: null,
+    workersNeeded: 1,
+    pricingType: 'FIXED',
+    rateAmount: null,
+    rateScope: 'PER_JOBBER',
+    estimatedAmount: null,
+    paymentConfirmedAt: null,
+    submittedForReviewAt: null,
+    reviewInternalNote: null,
+    clientReviewMessage: null,
+    reviewChangeAreas: [],
+    rejectionReasonCode: null,
+    rejectionReasonText: null,
+    financialFollowUpRequired: false,
     minimumAge: 16,
     riskFlags: [],
     selectedJobberUserId: null,
@@ -235,6 +303,12 @@ const TABLE_DEFAULTS: Record<string, () => Row> = {
     completedAt: null,
     cancelledAt: null,
   }),
+  missionOccurrence: () => ({
+    plannedStartAt: null,
+    plannedEndAt: null,
+    estimatedDurationMinutes: null,
+    sortOrder: 0,
+  }),
   missionApplication: () => ({
     status: 'PENDING',
     message: null,
@@ -242,6 +316,15 @@ const TABLE_DEFAULTS: Record<string, () => Row> = {
     withdrawnAt: null,
     selectedAt: null,
     rejectedAt: null,
+    closedAt: null,
+  }),
+  missionAssignment: () => ({
+    status: 'ACTIVE',
+    cancelledAt: null,
+    cancellationReason: null,
+    workerGrossAmount: 0,
+    commissionRateBps: 1500,
+    currency: 'XOF',
   }),
   missionVerification: () => ({
     attempts: 0,
@@ -255,6 +338,31 @@ const TABLE_DEFAULTS: Record<string, () => Row> = {
     blocksMission: false,
     resolvedAt: null,
   }),
+  documentType: () => ({ isActive: true }),
+  userDocument: () => ({
+    status: 'PENDING',
+    verificationCaseId: null,
+    identitySubType: null,
+    originalFilename: null,
+    capturedAt: null,
+    submittedAt: new Date(),
+    reviewedAt: null,
+    reviewedById: null,
+    reasonCode: null,
+    userMessage: null,
+  }),
+  userDocumentEvent: () => ({ actorId: null, metadata: null }),
+  verificationCase: () => ({
+    status: 'DRAFT',
+    submittedAt: null,
+    reviewedAt: null,
+    reviewedById: null,
+    userMessage: null,
+    internalNote: null,
+    reasonCode: null,
+    resubmitOfId: null,
+  }),
+  adminAuditEvent: () => ({ metadata: null }),
   missionStatusHistory: () => ({
     fromStatus: null,
     actorUserId: null,
@@ -277,10 +385,22 @@ export class InMemoryPrisma {
   readonly serviceRequirement = this.table('serviceRequirement');
   readonly mission = this.table('mission');
   readonly missionApplication = this.table('missionApplication');
+  readonly missionAssignment = this.table('missionAssignment');
   readonly missionVerification = this.table('missionVerification');
   readonly missionCancellation = this.table('missionCancellation');
   readonly missionIncident = this.table('missionIncident');
   readonly missionStatusHistory = this.table('missionStatusHistory');
+  readonly missionOccurrence = this.table('missionOccurrence');
+  readonly missionMedia = this.table('missionMedia');
+  readonly documentType = this.table('documentType');
+  readonly userDocument = this.table('userDocument');
+  readonly userDocumentEvent = this.table('userDocumentEvent');
+  readonly verificationCase = this.table('verificationCase');
+  readonly userLanguage = this.table('userLanguage');
+  readonly jobberEducation = this.table('jobberEducation');
+  readonly jobberExperience = this.table('jobberExperience');
+  readonly jobberSkill = this.table('jobberSkill');
+  readonly adminAuditEvent = this.table('adminAuditEvent');
 
   readonly $queryRaw = jest.fn(() =>
     Promise.resolve([{ nextval: BigInt(++this.sequence) }]),

@@ -12,15 +12,19 @@ import { RequestIdInterceptor } from './common/interceptors/request-id.intercept
 import { EmailModule } from './infrastructure/email/email.module';
 import { PrismaModule } from './infrastructure/prisma/prisma.module';
 import { SmsModule } from './infrastructure/sms/sms.module';
+import { StorageModule } from './infrastructure/storage/storage.module';
 import { AdminUsersModule } from './modules/admin-users/admin-users.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { CatalogModule } from './modules/catalog/catalog.module';
+import { ClientsModule } from './modules/clients/clients.module';
 import { EligibilityModule } from './modules/eligibility/eligibility.module';
 import { HealthModule } from './modules/health/health.module';
 import { JobbersModule } from './modules/jobbers/jobbers.module';
 import { MetaModule } from './modules/meta/meta.module';
 import { MissionsModule } from './modules/missions/missions.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
 import { UsersModule } from './modules/users/users.module';
+import { VerificationsModule } from './modules/verifications/verifications.module';
 
 @Module({
   imports: [
@@ -45,12 +49,16 @@ import { UsersModule } from './modules/users/users.module';
     PrismaModule,
     EmailModule,
     SmsModule,
+    StorageModule,
     AuthModule,
     UsersModule,
+    ClientsModule,
     CatalogModule,
     EligibilityModule,
     JobbersModule,
     MissionsModule,
+    VerificationsModule,
+    NotificationsModule,
     AdminUsersModule,
     HealthModule,
     MetaModule,

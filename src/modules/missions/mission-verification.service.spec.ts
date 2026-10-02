@@ -5,9 +5,15 @@ import {
   HttpException,
   NotFoundException,
 } from '@nestjs/common';
-import { MissionStatus, MissionVerificationType } from '@prisma/client';
+import {
+  MissionApplicationStatus,
+  MissionStatus,
+  MissionVerificationType,
+} from '@prisma/client';
 import { InMemoryPrisma } from '../../../test/support/in-memory-prisma';
 import {
+  insertActiveAssignment,
+  insertApplication,
   insertMission,
   seedWorld,
   type World,
@@ -37,11 +43,25 @@ describe('MissionVerificationService', () => {
     );
   });
 
-  const confirmedMission = (status: MissionStatus = MissionStatus.CONFIRMED) =>
-    insertMission(db, world, {
+  const confirmedMission = async (
+    status: MissionStatus = MissionStatus.CONFIRMED,
+  ) => {
+    const mission = await insertMission(db, world, {
       status,
       selectedJobberUserId: world.jobber.id,
     });
+    const app = await insertApplication(db, mission.id, world.jobber.id, {
+      status: MissionApplicationStatus.SELECTED,
+      selectedAt: new Date(),
+    });
+    await insertActiveAssignment(db, {
+      missionId: mission.id,
+      jobberUserId: world.jobber.id,
+      applicationId: app.id,
+      selectedByUserId: world.client.id,
+    });
+    return mission;
+  };
 
   describe('generate', () => {
     it('returns a 4-digit code once and stores only its hash', async () => {

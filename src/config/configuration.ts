@@ -17,6 +17,23 @@ export type AppConfig = {
   directUrl: string;
 };
 
+export type StorageConfig = {
+  provider: 'local_private' | 'object_storage' | 'memory';
+  localPath: string;
+  /** TTL URL signée (secondes), max 900. */
+  signedUrlTtlSeconds: number;
+  /** Taille max upload KYC (octets). */
+  maxUploadBytes: number;
+  s3: {
+    endpoint: string | null;
+    region: string;
+    bucket: string;
+    accessKeyId: string;
+    secretAccessKey: string;
+    forcePathStyle: boolean;
+  };
+};
+
 export type AuthConfig = {
   jwtAccessSecret: string;
   jwtAccessTtl: string;
@@ -30,6 +47,12 @@ export type AuthConfig = {
   appWebUrl: string;
   smsProvider: 'console' | 'none';
   defaultPhoneRegion: string;
+};
+
+/** Paiement publication Mission. Fail-closed : mock uniquement si explicite. */
+export type PaymentConfig = {
+  /** `mock` = simulateur DEV ; `none` = pas de provider (défaut). */
+  provider: 'mock' | 'none';
 };
 
 function parseBoolean(value: string | undefined, fallback: boolean): boolean {
@@ -61,10 +84,30 @@ function resolveSmsProvider(
   return 'console';
 }
 
-export default (): { app: AppConfig; auth: AuthConfig } => {
+export default (): {
+  app: AppConfig;
+  auth: AuthConfig;
+  storage: StorageConfig;
+  payment: PaymentConfig;
+} => {
   const nodeEnv = (process.env.NODE_ENV ??
     'development') as AppConfig['nodeEnv'];
   const swaggerDefault = nodeEnv !== 'production';
+  const storageProviderRaw = (
+    process.env.STORAGE_PROVIDER ?? 'local_private'
+  ).trim();
+  const storageProvider =
+    storageProviderRaw === 'object_storage' ||
+    storageProviderRaw === 'memory' ||
+    storageProviderRaw === 'local_private'
+      ? storageProviderRaw
+      : 'local_private';
+
+  const paymentProviderRaw = (process.env.PAYMENT_PROVIDER ?? 'none')
+    .trim()
+    .toLowerCase();
+  const paymentProvider: PaymentConfig['provider'] =
+    paymentProviderRaw === 'mock' ? 'mock' : 'none';
 
   return {
     app: {
@@ -91,6 +134,23 @@ export default (): { app: AppConfig; auth: AuthConfig } => {
       databaseUrl: process.env.DATABASE_URL ?? '',
       directUrl: process.env.DIRECT_URL ?? '',
     },
+    storage: {
+      provider: storageProvider,
+      localPath:
+        process.env.FILE_STORAGE_PATH?.trim() || './.data/private-uploads',
+      signedUrlTtlSeconds: Number(process.env.STORAGE_SIGNED_URL_TTL_SECONDS ?? 180),
+      maxUploadBytes: Number(
+        process.env.STORAGE_MAX_UPLOAD_BYTES ?? 8 * 1024 * 1024,
+      ),
+      s3: {
+        endpoint: process.env.S3_ENDPOINT?.trim() || null,
+        region: process.env.S3_REGION?.trim() || 'auto',
+        bucket: process.env.S3_BUCKET?.trim() || '',
+        accessKeyId: process.env.S3_ACCESS_KEY_ID?.trim() || '',
+        secretAccessKey: process.env.S3_SECRET_ACCESS_KEY?.trim() || '',
+        forcePathStyle: parseBoolean(process.env.S3_FORCE_PATH_STYLE, true),
+      },
+    },
     auth: {
       jwtAccessSecret: process.env.JWT_ACCESS_SECRET ?? '',
       jwtAccessTtl: process.env.JWT_ACCESS_TTL ?? '15m',
@@ -106,6 +166,9 @@ export default (): { app: AppConfig; auth: AuthConfig } => {
       appWebUrl: process.env.APP_WEB_URL ?? 'http://localhost:3000',
       smsProvider: resolveSmsProvider(nodeEnv, process.env.SMS_PROVIDER),
       defaultPhoneRegion: process.env.DEFAULT_PHONE_REGION ?? 'BJ',
+    },
+    payment: {
+      provider: paymentProvider,
     },
   };
 };

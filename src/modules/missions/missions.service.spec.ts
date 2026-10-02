@@ -5,15 +5,19 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import {
+  JobberStatus,
   MissionCancellationReason,
   MissionRiskFlag,
   MissionStatus,
 } from '@prisma/client';
 import { InMemoryPrisma } from '../../../test/support/in-memory-prisma';
+import { InMemoryStorageProvider } from '../../infrastructure/storage/in-memory-storage.provider';
 import {
   createUser,
+  insertActiveAssignment,
   insertApplication,
   insertMission,
+  publishMissionThroughReview,
   seedWorld,
   type World,
 } from '../../../test/support/mission-fixtures';
@@ -29,6 +33,22 @@ describe('MissionsService', () => {
   const inDays = (days: number) =>
     new Date(Date.now() + days * 86_400_000).toISOString();
 
+  async function assignJobber(
+    missionId: string,
+    jobberUserId = world.jobber.id,
+  ) {
+    const app = await insertApplication(db, missionId, jobberUserId, {
+      status: 'SELECTED',
+      selectedAt: new Date(),
+    });
+    await insertActiveAssignment(db, {
+      missionId,
+      jobberUserId,
+      applicationId: app.id,
+      selectedByUserId: world.client.id,
+    });
+  }
+
   const baseDto = () => ({
     serviceId: world.service.id,
     title: 'Ménage appartement',
@@ -41,7 +61,11 @@ describe('MissionsService', () => {
     db = new InMemoryPrisma();
     world = await seedWorld(db);
     lifecycle = new MissionLifecycleService(db.asPrismaService());
-    service = new MissionsService(db.asPrismaService(), lifecycle);
+    service = new MissionsService(
+      db.asPrismaService(),
+      lifecycle,
+      new InMemoryStorageProvider(),
+    );
   });
 
   describe('ensureClientProfile', () => {
@@ -178,6 +202,19 @@ describe('MissionsService', () => {
         service.create(world.client.id, { ...baseDto(), latitude: 6.36 }),
       ).rejects.toBeInstanceOf(BadRequestException);
     });
+
+    it('defaults workersNeeded to 1 when omitted', async () => {
+      const result = await service.create(world.client.id, baseDto());
+      expect(result.workersNeeded).toBe(1);
+    });
+
+    it('accepts an explicit workersNeeded value', async () => {
+      const result = await service.create(world.client.id, {
+        ...baseDto(),
+        workersNeeded: 50,
+      });
+      expect(result.workersNeeded).toBe(50);
+    });
   });
 
   describe('update', () => {
@@ -243,7 +280,9 @@ describe('MissionsService', () => {
       const mission = await insertMission(db, world, {
         status: MissionStatus.PAYMENT_REQUIRED,
         selectedJobberUserId: world.jobber.id,
+        workersNeeded: 1,
       });
+      await assignJobber(mission.id);
       const result = await service.cancel(world.jobber.id, mission.id, {
         reasonCode: MissionCancellationReason.JOBBER_UNAVAILABLE,
       });
@@ -257,6 +296,7 @@ describe('MissionsService', () => {
         status: MissionStatus.IN_PROGRESS,
         selectedJobberUserId: world.jobber.id,
       });
+      await assignJobber(mission.id);
       await expect(
         service.requestCompletion(world.client.id, mission.id),
       ).rejects.toBeInstanceOf(ForbiddenException);
@@ -266,9 +306,10 @@ describe('MissionsService', () => {
   });
 
   describe('markPaymentConfirmed (internal only)', () => {
-    it('moves PAYMENT_REQUIRED → CONFIRMED', async () => {
+    it('moves legacy PAYMENT_REQUIRED → CONFIRMED', async () => {
       const mission = await insertMission(db, world, {
         status: MissionStatus.PAYMENT_REQUIRED,
+        publishedAt: new Date(),
         selectedJobberUserId: world.jobber.id,
       });
       const result = await service.markPaymentConfirmed(mission.id);
@@ -314,6 +355,7 @@ describe('MissionsService', () => {
         status,
         selectedJobberUserId: world.jobber.id,
       });
+      await assignJobber(mission.id);
       const result = await service.getDetail(world.jobber.id, mission.id);
       expect(result).toMatchObject({
         viewerRole: 'JOBBER',
@@ -326,6 +368,7 @@ describe('MissionsService', () => {
         status: MissionStatus.PAYMENT_REQUIRED,
         selectedJobberUserId: world.jobber.id,
       });
+      await assignJobber(mission.id);
       await expect(
         service.getDetail(world.jobber2.id, mission.id),
       ).rejects.toBeInstanceOf(NotFoundException);
@@ -343,24 +386,24 @@ describe('MissionsService', () => {
         status: MissionStatus.PAYMENT_REQUIRED,
         selectedJobberUserId: world.jobber.id,
       });
-      await insertApplication(db, mission.id, world.jobber.id, {
-        status: 'SELECTED',
-      });
+      await assignJobber(mission.id);
       const result: any = await service.getDetail(world.client.id, mission.id);
       expect(result.applicationsCount).toBe(1);
-      expect(result.selectedJobber).toEqual({
+      expect(result.assignments).toHaveLength(1);
+      expect(result.assignments[0].jobber).toEqual({
         userId: world.jobber.id,
         firstName: 'Jules',
         lastName: 'Jobber',
         headline: 'Pro du ménage',
         bio: 'Dix ans d’expérience',
       });
+      expect(result.filledWorkers).toBe(1);
       expect(JSON.stringify(result)).not.toContain('hash-secret');
     });
   });
 
   describe('listAvailable', () => {
-    it('lists published missions for the jobber services, never with address', async () => {
+    it('lists published missions for any activated Jobber (explore-first)', async () => {
       await insertMission(db, world, { status: MissionStatus.PUBLISHED });
       await insertMission(db, world, { status: MissionStatus.DRAFT });
       await insertMission(db, world, {
@@ -372,30 +415,48 @@ describe('MissionsService', () => {
 
       expect(result.total).toBe(1);
       expect(result.items).toHaveLength(1);
+      expect(result.items[0].client?.displayName).toBeTruthy();
+      expect(result.items[0].client).not.toHaveProperty('email');
+      expect(result.items[0].client).not.toHaveProperty('phone');
       const json = JSON.stringify(result);
       expect(json).not.toContain('Cocotiers');
       expect(json).not.toContain('latitude');
       expect(json).not.toContain('longitude');
       expect(json).not.toContain('addressLine');
+      expect(json).not.toContain('clientUserId');
     });
 
-    it('excludes the jobber’s own missions and missions above their age', async () => {
-      const own = await createUser(db);
-      await db.jobberProfile.create({ data: { userId: own.id } });
+    it('lets unverified / incomplete Jobbers browse published missions', async () => {
+      await insertMission(db, world, { status: MissionStatus.PUBLISHED });
+      const draftJobber = await createUser(db);
+      await db.jobberProfile.create({
+        data: { userId: draftJobber.id, status: JobberStatus.DRAFT },
+      });
+      // Pas de JobberService ELIGIBLE — explore first.
+      const result = await service.listAvailable(draftJobber.id, {});
+      expect(result.total).toBeGreaterThanOrEqual(1);
+    });
+
+    it('still excludes the jobber’s own client missions from available list', async () => {
       await insertMission(db, world, {
         status: MissionStatus.PUBLISHED,
         minimumAge: 18,
       });
+      const asClient = await service.listAvailable(world.client.id, {}).catch(
+        (e: unknown) => e,
+      );
+      expect(asClient).toBeInstanceOf(ForbiddenException);
+
       const minor = await createUser(db, {
         dateOfBirth: new Date(new Date().getFullYear() - 17, 0, 1),
       });
-      const profile = await db.jobberProfile.create({
-        data: { userId: minor.id },
+      await db.jobberProfile.create({
+        data: { userId: minor.id, status: JobberStatus.DRAFT },
       });
-      await db.jobberService.create({
-        data: { jobberProfileId: profile.id, serviceId: world.service.id },
-      });
-      expect((await service.listAvailable(minor.id, {})).items).toHaveLength(0);
+      // Browse autorisé même si âge < minimumAge (gate à la candidature).
+      expect((await service.listAvailable(minor.id, {})).total).toBeGreaterThanOrEqual(
+        1,
+      );
     });
 
     it('filters by city case-insensitively and by service', async () => {
@@ -446,10 +507,11 @@ describe('MissionsService', () => {
     });
 
     it('listMineAsJobber returns missions where I am selected', async () => {
-      await insertMission(db, world, {
+      const mission = await insertMission(db, world, {
         status: MissionStatus.CONFIRMED,
         selectedJobberUserId: world.jobber.id,
       });
+      await assignJobber(mission.id);
       await insertMission(db, world, { status: MissionStatus.PUBLISHED });
       const result = await service.listMineAsJobber(world.jobber.id, {});
       expect(result.total).toBe(1);
@@ -463,6 +525,7 @@ describe('MissionsService', () => {
         status: MissionStatus.CONFIRMED,
         selectedJobberUserId: world.jobber.id,
       });
+      await assignJobber(mission.id);
       await insertMission(db, world, { status: MissionStatus.PUBLISHED });
 
       const list = await service.adminList({
@@ -473,20 +536,23 @@ describe('MissionsService', () => {
       const detail = await service.adminDetail(mission.id);
       expect(detail.addressLine).toBe('12 rue des Cocotiers');
       expect(detail.client?.firstName).toBe('Cora');
-      expect(detail.selectedJobber?.lastName).toBe('Jobber');
+      expect(detail.assignments[0]?.jobber?.lastName).toBe('Jobber');
+      expect(detail.filledWorkers).toBe(1);
       expect(detail.incidents).toEqual([]);
       expect(JSON.stringify(detail)).not.toContain('hash-secret');
     });
 
     it('adminHistory returns chronological entries and 404s on unknown ids', async () => {
       const mission = await insertMission(db, world);
-      await lifecycle.publish(mission.id, world.client.id);
+      await publishMissionThroughReview(
+        lifecycle,
+        mission.id,
+        world.client.id,
+        world.client.id,
+      );
       const history = await service.adminHistory(mission.id);
-      expect(history.items).toHaveLength(1);
-      expect(history.items[0]).toMatchObject({
-        fromStatus: 'DRAFT',
-        toStatus: 'PUBLISHED',
-      });
+      expect(history.items.length).toBeGreaterThanOrEqual(3);
+      expect(history.items.some((h) => h.toStatus === 'PUBLISHED')).toBe(true);
       await expect(
         service.adminHistory('00000000-0000-4000-8000-000000000000'),
       ).rejects.toBeInstanceOf(NotFoundException);

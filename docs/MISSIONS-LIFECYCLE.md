@@ -1,6 +1,10 @@
-# Missions — cycle de vie (Backend 04)
+# Missions - cycle de vie (Backend 04 + BO04 revue + BO05 multi-Jobber)
 
-Module Nest : `src/modules/missions/`. Migration : `20261002100000_missions_domain` (additive).
+Module Nest : `src/modules/missions/`. Migrations : `20261002100000_missions_domain`, `20261002160000_bo04_mission_review_v2`, `20261002180000_bo05_mission_assignments`.
+
+**BO04 (revue KingJOBS)** : voir `MISSION-REVIEW.md`. Le Client ne publie plus directement : `submit-for-payment` → paiement interne → `PENDING_REVIEW` → Admin → `PUBLISHED`.
+
+**BO05 (multi-Jobber)** : voir `MULTI-JOBBER-MISSIONS.md`, `MISSION-APPLICATIONS.md`, `MISSION-ASSIGNMENTS.md`. Le paiement publication est confirmé **avant** `PUBLISHED` ; la sélection d'effectif ne repasse pas par `PAYMENT_REQUIRED` lorsque `paymentConfirmedAt` est posé.
 
 ## Principes
 
@@ -28,7 +32,7 @@ DRAFT ──► PUBLISHED ──► APPLICATION_SELECTED ──► PAYMENT_REQUI
                                  └──── DISPUTED ◄── (APPLICATION_SELECTED … COMPLETION_PENDING)
 ```
 
-Table complète : `MISSION_TRANSITIONS` (`mission-lifecycle.service.ts`). `COMPLETED` et `CANCELLED` sont terminaux. `DISPUTED → CANCELLED | COMPLETED` est réservé à la résolution admin (Backend 05) — aucun endpoint aujourd'hui.
+Table complète : `MISSION_TRANSITIONS` (`mission-lifecycle.service.ts`). `COMPLETED` et `CANCELLED` sont terminaux. `DISPUTED → CANCELLED | COMPLETED` est réservé à la résolution admin (Backend 05) : aucun endpoint aujourd'hui.
 
 Chaque transition :
 1. vérifie la transition autorisée (`409` sinon) ;
@@ -38,7 +42,7 @@ Chaque transition :
 | Méthode | Transition | Acteur |
 | --- | --- | --- |
 | `publish` | DRAFT → PUBLISHED | Client propriétaire |
-| `selectApplication` | PUBLISHED → APPLICATION_SELECTED → PAYMENT_REQUIRED (1 transaction) | Client propriétaire |
+| `selectApplication` | Select progressif ; dernière place : PUBLISHED → APPLICATION_SELECTED → CONFIRMED (si payé) | Client propriétaire |
 | `markPaymentConfirmed` | PAYMENT_REQUIRED → CONFIRMED | **Interne uniquement** (Backend 05 / tests) |
 | `markReadyToStart` | CONFIRMED → READY_TO_START | Interne |
 | `startMission` | CONFIRMED \| READY_TO_START → IN_PROGRESS | Via validation code/QR |
@@ -51,17 +55,22 @@ Chaque transition :
 
 **Il n'existe aucune route HTTP pour confirmer un paiement.** `MissionsService.markPaymentConfirmed(missionId, actorUserId?)` est exposée uniquement en méthode de service (module exporte `MissionsService`). `missions.routes.spec.ts` et l'e2e vérifient l'absence de toute route `payment|confirm` (404). FedaPay n'est pas implémenté (Backend 05).
 
-## Sélection d'un Jobber (transactionnelle)
+## Sélection multi-Jobber (transactionnelle, BO05)
 
 `POST /missions/:missionId/applications/:applicationId/select` :
 
 1. Réévaluation de l'éligibilité du Jobber (hors transaction, `409` si plus éligible).
 2. `prisma.$transaction` :
-   - `updateMany` sur la mission `where { status: PUBLISHED, selectedJobberUserId: null, clientUserId }` → verrou (`count === 0` ⇒ `409`) ;
-   - candidature `PENDING → SELECTED` (garde `PENDING`, sinon rollback complet) ;
-   - autres candidatures `PENDING → REJECTED` ;
-   - `APPLICATION_SELECTED → PAYMENT_REQUIRED` ;
-   - 2 lignes d'historique.
+   - `SELECT … FOR UPDATE` sur la Mission ;
+   - garde places restantes (`computeStaffing` / affectations ACTIVE) ;
+   - candidature `PENDING → SELECTED` + création `MissionAssignment` ACTIVE ;
+   - si places restantes : Mission reste `PUBLISHED` ;
+   - si effectif complet : autres `PENDING → MISSION_FILLED`, puis `PUBLISHED → APPLICATION_SELECTED → CONFIRMED` lorsque `paymentConfirmedAt` (ou `publishedAt`) est déjà posé ;
+   - **pas** de transition vers `PAYMENT_REQUIRED` après sélection dans le flux BO04+ (paiement avant publication).
+
+Annulation d'un slot : `POST /missions/:missionId/assignments/:assignmentId/cancel` (rouvre une place ; peut repasser en `PUBLISHED`).
+
+Détails : `MULTI-JOBBER-MISSIONS.md`.
 
 ## Éligibilité à la candidature
 

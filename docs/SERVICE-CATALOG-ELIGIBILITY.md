@@ -2,7 +2,7 @@
 
 ## Objectif
 
-Source de vérité du catalogue KingJOBS (8 catégories / 35 services) et couche métier Jobber :
+Source de vérité du catalogue KingJOBS (8 catégories / 40 services) et couche métier Jobber :
 
 - services proposés ;
 - compétences ;
@@ -141,10 +141,16 @@ Actifs uniquement par défaut.
 
 | Méthode | Path |
 | --- | --- |
+| GET | `/api/v1/admin/catalog/overview` |
+| GET | `/api/v1/admin/service-categories` (toutes, filtre `search` optionnel) |
+| GET | `/api/v1/admin/service-categories/:id` (UUID) |
 | POST/PATCH | `/api/v1/admin/service-categories` / `:id` |
+| GET | `/api/v1/admin/services` (paginé : `page`, `pageSize`, `search`, `categoryId`, `status`, `minAge`) |
+| GET | `/api/v1/admin/services/:id` (UUID, exigences actives et inactives) |
 | POST/PATCH | `/api/v1/admin/services` / `:id` |
 | POST | `/api/v1/admin/services/:id/requirements` |
 | PATCH | `/api/v1/admin/service-requirements/:id` |
+| GET | `/api/v1/admin/document-types` (types actifs) |
 
 Désactivation = `isActive=false` (pas de DROP).
 

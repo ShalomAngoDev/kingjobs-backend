@@ -13,11 +13,16 @@ import {
   UserStatus,
   type JobberStatus,
 } from '@prisma/client';
-import type { CountryCode } from 'libphonenumber-js';
 import {
   PRIVACY_POLICY_VERSION,
   TERMS_VERSION,
 } from '../../common/constants/terms';
+import {
+  DEFAULT_COUNTRY_CODE,
+  isSupportedCountryCode,
+  toLibPhoneCountry,
+  type SupportedCountryCode,
+} from '../../common/constants/supported-countries';
 import { assertMinimumAge, isMinor } from '../../common/utils/age';
 import { generateOtpCode, sha256Hex } from '../../common/utils/crypto-tokens';
 import { normalizeEmail } from '../../common/utils/email-normalize';
@@ -46,8 +51,14 @@ import { SessionsService } from './sessions.service';
 import { TokensService } from './tokens.service';
 
 const INVALID_CREDENTIALS = 'Identifiants invalides';
+const INVALID_PHONE_CREDENTIALS =
+  'Numéro de téléphone ou mot de passe incorrect.';
 const FORGOT_PASSWORD_MESSAGE =
   'Si un compte existe pour cet email, un lien de réinitialisation a été envoyé.';
+const USER_PROFILE_INCLUDE = {
+  jobberProfile: true,
+  clientProfile: true,
+} as const;
 
 @Injectable()
 export class AuthService {
@@ -66,14 +77,23 @@ export class AuthService {
     return this.configService.getOrThrow<AuthConfig>('auth');
   }
 
-  private phoneRegion(): CountryCode {
-    return (this.authConfig.defaultPhoneRegion || 'BJ') as CountryCode;
+  private phoneRegion(
+    countryCode?: string | null,
+  ): SupportedCountryCode {
+    if (isSupportedCountryCode(countryCode)) {
+      return countryCode;
+    }
+    const fallback = this.authConfig.defaultPhoneRegion || DEFAULT_COUNTRY_CODE;
+    return isSupportedCountryCode(fallback) ? fallback : DEFAULT_COUNTRY_CODE;
   }
 
   /**
-   * Inscription.
-   * ClientProfile n'est PAS créé ici (lazy / à la demande).
-   * identityVerificationStatus reste UNVERIFIED.
+   * Inscription WEBAPP-01.
+   * Téléphone = identifiant principal. Email facultatif (jamais synthétique).
+   * countryCode = BJ | CI | TG (stocké + utilisé pour normalisation).
+   * DOB optionnelle (complétion profil ultérieure).
+   * ClientProfile / JobberProfile non créés ici.
+   * identityVerificationStatus reste UNVERIFIED ; phoneVerifiedAt reste null.
    */
   async register(
     dto: RegisterDto,
@@ -81,23 +101,42 @@ export class AuthService {
   ): Promise<AuthTokensResponse> {
     if (!dto.acceptTerms) {
       throw new BadRequestException(
-        'Vous devez accepter les conditions d’utilisation',
+        'Vous devez accepter les Conditions Générales d’Utilisation.',
       );
     }
 
-    const dateOfBirth = new Date(dto.dateOfBirth);
-    if (Number.isNaN(dateOfBirth.getTime())) {
-      throw new BadRequestException('Date de naissance invalide');
+    if (!isSupportedCountryCode(dto.countryCode)) {
+      throw new BadRequestException(
+        'Pays non supporté. Choisissez Bénin, Côte d’Ivoire ou Togo.',
+      );
+    }
+    const countryCode = dto.countryCode;
+
+    let dateOfBirth: Date | null = null;
+    let legalGuardianStatus: LegalGuardianStatus =
+      LegalGuardianStatus.NOT_REQUIRED;
+
+    if (dto.dateOfBirth != null && String(dto.dateOfBirth).trim() !== '') {
+      dateOfBirth = new Date(dto.dateOfBirth);
+      if (Number.isNaN(dateOfBirth.getTime())) {
+        throw new BadRequestException('Date de naissance invalide');
+      }
+      assertMinimumAge(dateOfBirth, 16);
+      legalGuardianStatus = isMinor(dateOfBirth)
+        ? LegalGuardianStatus.REQUIRED
+        : LegalGuardianStatus.NOT_REQUIRED;
     }
 
-    const age = assertMinimumAge(dateOfBirth, 16);
-    const legalGuardianStatus = isMinor(dateOfBirth)
-      ? LegalGuardianStatus.REQUIRED
-      : LegalGuardianStatus.NOT_REQUIRED;
-
-    const email = dto.email.trim();
-    const emailNormalized = normalizeEmail(email);
-    const phone = normalizePhoneToE164(dto.phone, this.phoneRegion());
+    const emailRaw =
+      dto.email != null && String(dto.email).trim() !== ''
+        ? String(dto.email).trim()
+        : null;
+    const emailNormalized = emailRaw ? normalizeEmail(emailRaw) : null;
+    const phone = normalizePhoneToE164(
+      dto.phone,
+      toLibPhoneCountry(countryCode),
+      { expectedCountry: countryCode },
+    );
     const passwordHash = await hashPassword(dto.password);
 
     try {
@@ -106,14 +145,13 @@ export class AuthService {
           data: {
             firstName: dto.firstName.trim(),
             lastName: dto.lastName.trim(),
-            email,
+            email: emailRaw,
             emailNormalized,
             phone,
+            countryCode,
             passwordHash,
             dateOfBirth,
             legalGuardianStatus,
-            // identityVerificationStatus: défaut UNVERIFIED (Prisma)
-            // ClientProfile : volontairement NON créé à l'inscription (lazy).
           },
         });
 
@@ -128,14 +166,22 @@ export class AuthService {
         return created;
       });
 
-      const emailToken = await this.tokensService.createEmailVerificationToken(
-        user.id,
-      );
-      await this.sendVerificationEmail(user.email, emailToken);
+      if (user.email) {
+        try {
+          const emailToken =
+            await this.tokensService.createEmailVerificationToken(user.id);
+          await this.sendVerificationEmail(user.email, emailToken);
+        } catch (error) {
+          this.logger.warn(
+            `register email verification skipped userId=${user.id}: ${String(error)}`,
+          );
+        }
+      }
 
-      const withJobber = { ...user, jobberProfile: null };
-      void age;
-      return this.sessionsService.issueTokensForUser(withJobber, { userAgent });
+      return this.sessionsService.issueTokensForUser(
+        { ...user, jobberProfile: null, clientProfile: null },
+        { userAgent },
+      );
     } catch (error) {
       if (isUniqueViolation(error)) {
         throw new ConflictException(
@@ -146,30 +192,61 @@ export class AuthService {
     }
   }
 
+  /**
+   * Connexion User (téléphone) ou Admin (email).
+   * Messages génériques anti-énumération.
+   */
   async login(
     dto: LoginDto,
     userAgent?: string | null,
   ): Promise<AuthTokensResponse> {
-    const emailNormalized = normalizeEmail(dto.email);
-    const user = await this.prisma.user.findUnique({
-      where: { emailNormalized },
-      include: { jobberProfile: true },
-    });
+    const phoneRaw = dto.phone?.trim();
+    const emailRaw = dto.email?.trim();
+
+    if (!phoneRaw && !emailRaw) {
+      throw new BadRequestException(
+        'Indiquez votre numéro de téléphone ou votre email.',
+      );
+    }
+
+    const invalidMessage = phoneRaw
+      ? INVALID_PHONE_CREDENTIALS
+      : INVALID_CREDENTIALS;
+
+    let user;
+    if (phoneRaw) {
+      const region = this.phoneRegion(dto.countryCode);
+      const phone = normalizePhoneToE164(phoneRaw, toLibPhoneCountry(region), {
+        expectedCountry: isSupportedCountryCode(dto.countryCode)
+          ? dto.countryCode
+          : undefined,
+      });
+      user = await this.prisma.user.findUnique({
+        where: { phone },
+        include: USER_PROFILE_INCLUDE,
+      });
+    } else {
+      const emailNormalized = normalizeEmail(emailRaw!);
+      user = await this.prisma.user.findUnique({
+        where: { emailNormalized },
+        include: USER_PROFILE_INCLUDE,
+      });
+    }
 
     if (!user) {
-      throw new UnauthorizedException(INVALID_CREDENTIALS);
+      throw new UnauthorizedException(invalidMessage);
     }
 
     if (
       user.status === UserStatus.SUSPENDED ||
       user.status === UserStatus.CLOSED
     ) {
-      throw new UnauthorizedException(INVALID_CREDENTIALS);
+      throw new UnauthorizedException(invalidMessage);
     }
 
     const valid = await verifyPassword(user.passwordHash, dto.password);
     if (!valid) {
-      throw new UnauthorizedException(INVALID_CREDENTIALS);
+      throw new UnauthorizedException(invalidMessage);
     }
 
     return this.sessionsService.issueTokensForUser(user, { userAgent });
@@ -229,7 +306,7 @@ export class AuthService {
       where: { emailNormalized },
     });
 
-    if (user && user.status !== UserStatus.CLOSED) {
+    if (user && user.status !== UserStatus.CLOSED && user.email) {
       try {
         const token = await this.tokensService.createPasswordResetToken(
           user.id,
@@ -330,7 +407,7 @@ export class AuthService {
     const message =
       'Si un compte existe pour cet email, un lien de vérification a été envoyé.';
 
-    if (!user || user.emailVerifiedAt || user.status === UserStatus.CLOSED) {
+    if (!user || user.emailVerifiedAt || user.status === UserStatus.CLOSED || !user.email) {
       return { message };
     }
 
@@ -358,7 +435,7 @@ export class AuthService {
     }
 
     const phone = dto.phone
-      ? normalizePhoneToE164(dto.phone, this.phoneRegion())
+      ? normalizePhoneToE164(dto.phone, toLibPhoneCountry(this.phoneRegion()))
       : user.phone;
 
     const code = generateOtpCode();
@@ -438,7 +515,7 @@ export class AuthService {
   async getSafeUserById(userId: string): Promise<SafeUser> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      include: { jobberProfile: true },
+      include: USER_PROFILE_INCLUDE,
     });
     if (!user) {
       throw new UnauthorizedException('Authentification requise');
@@ -456,28 +533,55 @@ export class AuthService {
       lastName?: string;
       email?: string;
       phone?: string;
+      dateOfBirth?: string | null;
     },
   ): Promise<SafeUser> {
     const update: {
       firstName?: string;
       lastName?: string;
-      email?: string;
-      emailNormalized?: string;
+      email?: string | null;
+      emailNormalized?: string | null;
       emailVerifiedAt?: Date | null;
       phone?: string;
       phoneVerifiedAt?: Date | null;
+      dateOfBirth?: Date | null;
+      legalGuardianStatus?: LegalGuardianStatus;
     } = {};
 
     if (data.firstName !== undefined) update.firstName = data.firstName.trim();
     if (data.lastName !== undefined) update.lastName = data.lastName.trim();
 
+    if (data.dateOfBirth !== undefined) {
+      if (data.dateOfBirth === null || String(data.dateOfBirth).trim() === '') {
+        update.dateOfBirth = null;
+        update.legalGuardianStatus = LegalGuardianStatus.NOT_REQUIRED;
+      } else {
+        const dob = new Date(data.dateOfBirth);
+        if (Number.isNaN(dob.getTime())) {
+          throw new BadRequestException('Date de naissance invalide');
+        }
+        assertMinimumAge(dob, 16);
+        update.dateOfBirth = dob;
+        update.legalGuardianStatus = isMinor(dob)
+          ? LegalGuardianStatus.REQUIRED
+          : LegalGuardianStatus.NOT_REQUIRED;
+      }
+    }
+
     if (data.email !== undefined) {
-      update.email = data.email.trim();
-      update.emailNormalized = normalizeEmail(data.email);
+      const emailRaw = data.email.trim();
+      if (!emailRaw) {
+        throw new BadRequestException('Email invalide');
+      }
+      update.email = emailRaw;
+      update.emailNormalized = normalizeEmail(emailRaw);
       update.emailVerifiedAt = null;
     }
     if (data.phone !== undefined) {
-      update.phone = normalizePhoneToE164(data.phone, this.phoneRegion());
+      update.phone = normalizePhoneToE164(
+        data.phone,
+        toLibPhoneCountry(this.phoneRegion()),
+      );
       update.phoneVerifiedAt = null;
     }
 
@@ -485,10 +589,10 @@ export class AuthService {
       const user = await this.prisma.user.update({
         where: { id: userId },
         data: update,
-        include: { jobberProfile: true },
+        include: USER_PROFILE_INCLUDE,
       });
 
-      if (data.email !== undefined) {
+      if (data.email !== undefined && user.email) {
         const token = await this.tokensService.createEmailVerificationToken(
           user.id,
         );
@@ -560,10 +664,60 @@ export class AuthService {
       return this.serializeJobberProfile(existing);
     }
 
-    const created = await this.prisma.jobberProfile.create({
-      data: { userId, status: 'DRAFT' },
+    try {
+      const created = await this.prisma.jobberProfile.create({
+        data: { userId, status: 'DRAFT' },
+      });
+      return this.serializeJobberProfile(created);
+    } catch (error) {
+      if (isUniqueViolation(error)) {
+        const again = await this.prisma.jobberProfile.findUniqueOrThrow({
+          where: { userId },
+        });
+        return this.serializeJobberProfile(again);
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Active le parcours Client sur le User existant (lazy, idempotent).
+   * Ne crée pas un deuxième User.
+   */
+  async activateClient(userId: string) {
+    const existing = await this.prisma.clientProfile.findUnique({
+      where: { userId },
     });
-    return this.serializeJobberProfile(created);
+    if (existing) {
+      return {
+        id: existing.id,
+        createdAt: existing.createdAt.toISOString(),
+        updatedAt: existing.updatedAt.toISOString(),
+      };
+    }
+
+    try {
+      const created = await this.prisma.clientProfile.create({
+        data: { userId },
+      });
+      return {
+        id: created.id,
+        createdAt: created.createdAt.toISOString(),
+        updatedAt: created.updatedAt.toISOString(),
+      };
+    } catch (error) {
+      if (isUniqueViolation(error)) {
+        const again = await this.prisma.clientProfile.findUniqueOrThrow({
+          where: { userId },
+        });
+        return {
+          id: again.id,
+          createdAt: again.createdAt.toISOString(),
+          updatedAt: again.updatedAt.toISOString(),
+        };
+      }
+      throw error;
+    }
   }
 
   async getJobberMe(userId: string) {

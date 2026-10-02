@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import {
   MissionActorType,
+  MissionAssignmentStatus,
   MissionIncidentStatus,
   MissionIncidentType,
   MissionStatus,
@@ -75,7 +76,16 @@ export class MissionIncidentsService {
       throw new NotFoundException('Mission introuvable');
     }
     const isClient = mission.clientUserId === userId;
-    const isJobber = mission.selectedJobberUserId === userId;
+    const assignment = isClient
+      ? null
+      : await this.prisma.missionAssignment.findFirst({
+          where: {
+            missionId,
+            jobberUserId: userId,
+            status: MissionAssignmentStatus.ACTIVE,
+          },
+        });
+    const isJobber = Boolean(assignment) || mission.selectedJobberUserId === userId;
     if (!isClient && !isJobber) {
       throw new NotFoundException('Mission introuvable');
     }

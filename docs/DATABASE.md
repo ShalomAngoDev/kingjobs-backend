@@ -20,7 +20,7 @@
 | Schéma `neon_auth.*` | Neon Auth (plateforme) | Hors scope — ne pas modifier |
 | Tables auth Nest (`users`, `sessions`, …) | NestJS + Prisma Migrate | Migration `20261001140000_auth_identity` |
 | Catalogue / Jobber métier | NestJS + Prisma Migrate | Migration `20261001160000_service_catalog_jobber_eligibility` |
-| Missions (`missions`, `mission_applications`, `mission_verifications`, `mission_cancellations`, `mission_incidents`, `mission_status_history`) + séquence `mission_reference_seq` | NestJS + Prisma Migrate | Migration `20261002100000_missions_domain` (additive, ne touche pas aux tables pré-lancement) |
+| Missions (`missions`, `mission_applications`, `mission_verifications`, `mission_cancellations`, `mission_incidents`, `mission_status_history`) + séquence `mission_reference_seq` | NestJS + Prisma Migrate | Migration `20261002100000_missions_domain` (additive, ne touche pas aux tables pré-lancement). Colonne `workers_needed` (défaut 1) via `20261002120000_multi_worker_missions_and_operations_catalog`. Catalogue seed : 8 catégories / 40 services (personnel événementiel sous Événements & Créatif). Voir [MULTI-JOBBER-MISSIONS.md](./MULTI-JOBBER-MISSIONS.md). |
 | Futures tables paiements, avis… | NestJS + Prisma Migrate | Backend 05+ |
 
 Les modèles pré-lancement ne sont **plus** dans `schema.prisma` (évite toute migration qui les recrée). Ils restent documentés ci-dessous.
@@ -51,6 +51,7 @@ Détail colonnes (sans données) :
 - `status` text not null default `ACTIVE`
 - `source` text null
 - `created_at` timestamptz not null default `now()`
+- `admin_read_at` timestamptz null *(première ouverture fiche admin, badges non lus)*
 
 Les colonnes ajoutées sont **NULL** pour rester compatibles avec les anciennes lignes (email+prénom seuls).
 Migration additive : `WebSite/docs/sql/waitlist-qualified-prelaunch.sql`.
@@ -77,8 +78,15 @@ Migration additive : `WebSite/docs/sql/waitlist-qualified-prelaunch.sql`.
 - `id` uuid PK
 - `first_name`, `last_name`, `phone`, `email`, `customer_type`, `description` not null
 - `organization_name`, `service_id`, `other_service`, `city_or_area`, `desired_date` null
+- `desired_start_time`, `desired_end_time` null (horaires optionnels, CATALOGUE & MISSIONS 04.2)
+- `workers_needed` integer NOT NULL DEFAULT 1 (besoin multi-personnes Phase 1)
+- `category_id` null (filtre catalogue pré-lancement)
 - `status` default `NEW`, `source` default `website`
 - `created_at` + index DESC
+- `admin_read_at` timestamptz null *(première ouverture fiche admin, badges non lus)*
+
+> Colonnes `workers_needed` / horaires : SQL additif WebSite `docs/sql/prelaunch-missions-workers.sql` (appliquer manuellement en production).
+> Colonne `admin_read_at` : SQL additif WebSite `docs/sql/prelaunch-admin-read.sql`.
 
 ## Stratégie Prisma (baseline)
 

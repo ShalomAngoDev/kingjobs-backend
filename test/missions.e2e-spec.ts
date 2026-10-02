@@ -55,7 +55,7 @@ describe('Missions API e2e (in-memory store)', () => {
     await http().post('/api/v1/missions').send({}).expect(401);
   });
 
-  it('happy path: create → publish → apply → select returns PAYMENT_REQUIRED', async () => {
+  it('happy path: create → review → publish → apply → select returns CONFIRMED', async () => {
     // 1. Création (DRAFT)
     const created = await http()
       .post('/api/v1/missions')
@@ -87,10 +87,16 @@ describe('Missions API e2e (in-memory store)', () => {
       .set(as(world.jobber))
       .expect(404);
 
-    // 2. Publication
-    const published = await http()
-      .post(`/api/v1/missions/${missionId}/publish`)
+    // 2. Soumission → paiement (interne) → revue Admin
+    await http()
+      .post(`/api/v1/missions/${missionId}/submit-for-payment`)
       .set(as(world.client))
+      .expect(200);
+    await missionsService.markPaymentConfirmed(missionId);
+    const published = await http()
+      .post(`/api/v1/admin/missions/${missionId}/approve`)
+      .set(as(admin))
+      .send({})
       .expect(200);
     expect(published.body.status).toBe('PUBLISHED');
 
@@ -136,7 +142,7 @@ describe('Missions API e2e (in-memory store)', () => {
       /passwordHash|@example\.test|phone/,
     );
 
-    // 5. Sélection → PAYMENT_REQUIRED
+    // 5. Sélection → CONFIRMED (paiement publication déjà effectué)
     const selected = await http()
       .post(
         `/api/v1/missions/${missionId}/applications/${application.body.id}/select`,
@@ -144,7 +150,7 @@ describe('Missions API e2e (in-memory store)', () => {
       .set(as(world.client))
       .expect(200);
     expect(selected.body).toMatchObject({
-      status: 'PAYMENT_REQUIRED',
+      status: 'CONFIRMED',
       selectedJobberUserId: world.jobber.id,
     });
 
@@ -176,9 +182,11 @@ describe('Missions API e2e (in-memory store)', () => {
       .expect(200);
     expect(history.body.items.map((h: any) => h.toStatus)).toEqual([
       'DRAFT',
+      'PAYMENT_REQUIRED',
+      'PENDING_REVIEW',
       'PUBLISHED',
       'APPLICATION_SELECTED',
-      'PAYMENT_REQUIRED',
+      'CONFIRMED',
     ]);
   });
 
@@ -192,12 +200,19 @@ describe('Missions API e2e (in-memory store)', () => {
         description: 'Nettoyage de printemps de la maison entière.',
         city: 'Cotonou',
         clientPriceAmount: 20000,
+        scheduledStartAt: new Date(Date.now() + 2 * 86_400_000).toISOString(),
       })
       .expect(201);
     const id = created.body.id as string;
     await http()
-      .post(`/api/v1/missions/${id}/publish`)
+      .post(`/api/v1/missions/${id}/submit-for-payment`)
       .set(as(world.client))
+      .expect(200);
+    await missionsService.markPaymentConfirmed(id);
+    await http()
+      .post(`/api/v1/admin/missions/${id}/approve`)
+      .set(as(admin))
+      .send({})
       .expect(200);
     const application = await http()
       .post(`/api/v1/missions/${id}/applications`)

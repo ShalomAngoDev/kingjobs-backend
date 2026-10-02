@@ -10,8 +10,12 @@ import {
 } from '@prisma/client';
 import { InMemoryPrisma } from '../../../test/support/in-memory-prisma';
 import {
+  insertActiveAssignment,
   insertApplication,
   insertMission,
+  insertPublishedMission,
+  publishMissionThroughReview,
+  createJobber,
   seedWorld,
   type World,
 } from '../../../test/support/mission-fixtures';
@@ -30,6 +34,22 @@ describe('MissionLifecycleService', () => {
     db.missionStatusHistory.rows
       .filter((h) => h.missionId === missionId)
       .map((h) => `${h.fromStatus}->${h.toStatus}`);
+
+  async function withAssignment(
+    missionId: string,
+    jobberUserId = world.jobber.id,
+  ) {
+    const app = await insertApplication(db, missionId, jobberUserId, {
+      status: MissionApplicationStatus.SELECTED,
+      selectedAt: new Date(),
+    });
+    await insertActiveAssignment(db, {
+      missionId,
+      jobberUserId,
+      applicationId: app.id,
+      selectedByUserId: world.client.id,
+    });
+  }
 
   beforeEach(async () => {
     db = new InMemoryPrisma();
@@ -64,26 +84,35 @@ describe('MissionLifecycleService', () => {
       expect(MISSION_TRANSITIONS.CANCELLED).toHaveLength(0);
     });
 
-    it('allows the nominal path end to end', () => {
-      const path: MissionStatus[] = [
+    it('allows the BO04 publication path and post-selection path', () => {
+      const publicationPath: MissionStatus[] = [
         MissionStatus.DRAFT,
+        MissionStatus.PAYMENT_REQUIRED,
+        MissionStatus.PENDING_REVIEW,
+        MissionStatus.PUBLISHED,
+      ];
+      for (let i = 0; i < publicationPath.length - 1; i += 1) {
+        expect(canTransition(publicationPath[i], publicationPath[i + 1])).toBe(
+          true,
+        );
+      }
+      const executionPath: MissionStatus[] = [
         MissionStatus.PUBLISHED,
         MissionStatus.APPLICATION_SELECTED,
-        MissionStatus.PAYMENT_REQUIRED,
         MissionStatus.CONFIRMED,
         MissionStatus.READY_TO_START,
         MissionStatus.IN_PROGRESS,
         MissionStatus.COMPLETION_PENDING,
         MissionStatus.COMPLETED,
       ];
-      for (let i = 0; i < path.length - 1; i += 1) {
-        expect(canTransition(path[i], path[i + 1])).toBe(true);
+      for (let i = 0; i < executionPath.length - 1; i += 1) {
+        expect(canTransition(executionPath[i], executionPath[i + 1])).toBe(true);
       }
     });
   });
 
-  describe('publish', () => {
-    it('publishes a DRAFT, refreshes snapshots and minimumAge, writes history', async () => {
+  describe('submitForPayment + approveForPublication', () => {
+    it('approves after payment review and refreshes snapshots', async () => {
       const mission = await insertMission(db, world, {
         serviceNameSnapshot: 'Ancien nom',
         riskFlags: ['DRIVING'],
@@ -94,48 +123,61 @@ describe('MissionLifecycleService', () => {
         data: { name: 'Ménage pro' },
       });
 
-      const published = await lifecycle.publish(mission.id, world.client.id);
+      await lifecycle.submitForPayment(mission.id, world.client.id);
+      await lifecycle.markPaymentConfirmed(mission.id, world.client.id);
+      const published = await lifecycle.approveForPublication(
+        mission.id,
+        world.client.id,
+      );
 
       expect(published.status).toBe(MissionStatus.PUBLISHED);
       expect(published.publishedAt).toBeInstanceOf(Date);
       expect(published.serviceNameSnapshot).toBe('Ménage pro');
       expect(published.minimumAge).toBe(18);
-      expect(historyOf(mission.id)).toEqual(['DRAFT->PUBLISHED']);
+      expect(historyOf(mission.id)).toContain('DRAFT->PAYMENT_REQUIRED');
+      expect(historyOf(mission.id)).toContain('PENDING_REVIEW->PUBLISHED');
     });
 
-    it('hides the mission from a non-owner (404)', async () => {
+    it('hides submit from a non-owner (404)', async () => {
       const mission = await insertMission(db, world);
       await expect(
-        lifecycle.publish(mission.id, world.jobber.id),
+        lifecycle.submitForPayment(mission.id, world.jobber.id),
       ).rejects.toBeInstanceOf(NotFoundException);
     });
 
-    it('rejects publishing twice', async () => {
-      const mission = await insertMission(db, world, {
-        status: MissionStatus.PUBLISHED,
-      });
-      await expect(
-        lifecycle.publish(mission.id, world.client.id),
-      ).rejects.toBeInstanceOf(ConflictException);
-    });
+    it.each([['UNVERIFIED'], ['PENDING'], ['NEEDS_CHANGES'], ['REJECTED']])(
+      'refuses submit when the client identity is %s',
+      async (identityVerificationStatus) => {
+        const mission = await insertMission(db, world);
+        await db.user.update({
+          where: { id: world.client.id },
+          data: { identityVerificationStatus },
+        });
+        await expect(
+          lifecycle.submitForPayment(mission.id, world.client.id),
+        ).rejects.toThrow(
+          'Votre identité doit être vérifiée avant de publier une mission.',
+        );
+      },
+    );
 
-    it('rejects publishing when the service has become inactive', async () => {
+    it('rejects admin approve when the service has become inactive', async () => {
       const mission = await insertMission(db, world);
+      await lifecycle.submitForPayment(mission.id, world.client.id);
+      await lifecycle.markPaymentConfirmed(mission.id);
       await db.service.update({
         where: { id: world.service.id },
         data: { isActive: false },
       });
       await expect(
-        lifecycle.publish(mission.id, world.client.id),
+        lifecycle.approveForPublication(mission.id, world.client.id),
       ).rejects.toBeInstanceOf(ConflictException);
     });
   });
 
   describe('selectApplication', () => {
-    it('selects, rejects others and ends in PAYMENT_REQUIRED with 2 history rows', async () => {
-      const mission = await insertMission(db, world, {
-        status: MissionStatus.PUBLISHED,
-      });
+    it('selects one Jobber, keeps others PENDING until mission is full, then CONFIRMED', async () => {
+      const mission = await insertPublishedMission(db, world);
       const chosen = await insertApplication(db, mission.id, world.jobber.id);
       const other = await insertApplication(db, mission.id, world.jobber2.id);
 
@@ -145,7 +187,8 @@ describe('MissionLifecycleService', () => {
         world.client.id,
       );
 
-      expect(result.status).toBe(MissionStatus.PAYMENT_REQUIRED);
+      // workersNeeded=1 → plein → CONFIRMED ; l'autre candidature → MISSION_FILLED
+      expect(result.status).toBe(MissionStatus.CONFIRMED);
       expect(result.selectedJobberUserId).toBe(world.jobber.id);
       expect(result.assignedAt).toBeInstanceOf(Date);
       expect(
@@ -155,17 +198,20 @@ describe('MissionLifecycleService', () => {
       expect(
         (await db.missionApplication.findUnique({ where: { id: other.id } }))
           ?.status,
-      ).toBe(MissionApplicationStatus.REJECTED);
+      ).toBe(MissionApplicationStatus.MISSION_FILLED);
+      expect(
+        await db.missionAssignment.count({
+          where: { missionId: mission.id, status: 'ACTIVE' },
+        }),
+      ).toBe(1);
       expect(historyOf(mission.id)).toEqual([
         'PUBLISHED->APPLICATION_SELECTED',
-        'APPLICATION_SELECTED->PAYMENT_REQUIRED',
+        'APPLICATION_SELECTED->CONFIRMED',
       ]);
     });
 
-    it('lets only one of two concurrent selections win', async () => {
-      const mission = await insertMission(db, world, {
-        status: MissionStatus.PUBLISHED,
-      });
+    it('lets only one of two concurrent selections win when workersNeeded=1', async () => {
+      const mission = await insertPublishedMission(db, world);
       const a = await insertApplication(db, mission.id, world.jobber.id);
       const b = await insertApplication(db, mission.id, world.jobber2.id);
 
@@ -180,25 +226,156 @@ describe('MissionLifecycleService', () => {
         ConflictException,
       );
       const final = await db.mission.findUnique({ where: { id: mission.id } });
-      expect(final?.status).toBe(MissionStatus.PAYMENT_REQUIRED);
+      expect(final?.status).toBe(MissionStatus.CONFIRMED);
       expect(final?.selectedJobberUserId).not.toBeNull();
+      expect(
+        await db.missionAssignment.count({
+          where: { missionId: mission.id, status: 'ACTIVE' },
+        }),
+      ).toBe(1);
     });
 
-    it('rejects when the conditional lock updates no row (race lost)', async () => {
-      const mission = await insertMission(db, world, {
-        status: MissionStatus.PUBLISHED,
+    it('keeps PUBLISHED when workersNeeded>1 until last slot is filled', async () => {
+      const mission = await insertPublishedMission(db, world, {
+        workersNeeded: 2,
+        clientPriceAmount: 20_000,
+        estimatedAmount: 20_000,
+        rateAmount: 10_000,
+        rateScope: 'PER_JOBBER',
       });
-      const app = await insertApplication(db, mission.id, world.jobber.id);
-      jest.spyOn(db.mission, 'updateMany').mockResolvedValueOnce({ count: 0 });
+      const a = await insertApplication(db, mission.id, world.jobber.id);
+      const b = await insertApplication(db, mission.id, world.jobber2.id);
 
-      await expect(
-        lifecycle.selectApplication(mission.id, app.id, world.client.id),
-      ).rejects.toBeInstanceOf(ConflictException);
-      expect(db.missionStatusHistory.rows).toHaveLength(0);
+      const afterFirst = await lifecycle.selectApplication(
+        mission.id,
+        a.id,
+        world.client.id,
+      );
+      expect(afterFirst.status).toBe(MissionStatus.PUBLISHED);
       expect(
-        (await db.missionApplication.findUnique({ where: { id: app.id } }))
-          ?.status,
-      ).toBe(MissionApplicationStatus.PENDING);
+        await db.missionAssignment.count({
+          where: { missionId: mission.id, status: 'ACTIVE' },
+        }),
+      ).toBe(1);
+
+      const afterSecond = await lifecycle.selectApplication(
+        mission.id,
+        b.id,
+        world.client.id,
+      );
+      expect(afterSecond.status).toBe(MissionStatus.CONFIRMED);
+      expect(
+        await db.missionAssignment.count({
+          where: { missionId: mission.id, status: 'ACTIVE' },
+        }),
+      ).toBe(2);
+    });
+
+    it('rejects a second select when workersNeeded=1', async () => {
+      const mission = await insertPublishedMission(db, world);
+      const first = await insertApplication(db, mission.id, world.jobber.id);
+      const second = await insertApplication(db, mission.id, world.jobber2.id);
+
+      await lifecycle.selectApplication(mission.id, first.id, world.client.id);
+      await expect(
+        lifecycle.selectApplication(mission.id, second.id, world.client.id),
+      ).rejects.toBeInstanceOf(ConflictException);
+    });
+
+    it('allows 10 selects then rejects the 11th when workersNeeded=10', async () => {
+      const mission = await insertPublishedMission(db, world, {
+        workersNeeded: 10,
+        clientPriceAmount: 100_000,
+        estimatedAmount: 100_000,
+        rateAmount: 10_000,
+        rateScope: 'PER_JOBBER',
+      });
+      const jobbers = [world.jobber, world.jobber2];
+      for (let i = 0; i < 9; i += 1) {
+        jobbers.push(await createJobber(db, world.service.id));
+      }
+      const apps = [];
+      for (const jobber of jobbers) {
+        apps.push(await insertApplication(db, mission.id, jobber.id));
+      }
+
+      for (let i = 0; i < 10; i += 1) {
+        const result = await lifecycle.selectApplication(
+          mission.id,
+          apps[i].id,
+          world.client.id,
+        );
+        if (i < 9) {
+          expect(result.status).toBe(MissionStatus.PUBLISHED);
+        } else {
+          expect(result.status).toBe(MissionStatus.CONFIRMED);
+        }
+      }
+      expect(
+        await db.missionAssignment.count({
+          where: { missionId: mission.id, status: 'ACTIVE' },
+        }),
+      ).toBe(10);
+      await expect(
+        lifecycle.selectApplication(mission.id, apps[10].id, world.client.id),
+      ).rejects.toBeInstanceOf(ConflictException);
+    });
+
+    it('does not transition to PAYMENT_REQUIRED when paymentConfirmedAt is set', async () => {
+      const mission = await insertPublishedMission(db, world);
+      const app = await insertApplication(db, mission.id, world.jobber.id);
+      const result = await lifecycle.selectApplication(
+        mission.id,
+        app.id,
+        world.client.id,
+      );
+      expect(result.status).toBe(MissionStatus.CONFIRMED);
+      expect(historyOf(mission.id)).not.toContain(
+        'APPLICATION_SELECTED->PAYMENT_REQUIRED',
+      );
+      expect(historyOf(mission.id)).toContain(
+        'APPLICATION_SELECTED->CONFIRMED',
+      );
+    });
+
+    it('cancelAssignment reopens a slot and returns to PUBLISHED when was full', async () => {
+      const mission = await insertPublishedMission(db, world, {
+        workersNeeded: 2,
+        clientPriceAmount: 20_000,
+        estimatedAmount: 20_000,
+        rateAmount: 10_000,
+        rateScope: 'PER_JOBBER',
+      });
+      const a = await insertApplication(db, mission.id, world.jobber.id);
+      const b = await insertApplication(db, mission.id, world.jobber2.id);
+      await lifecycle.selectApplication(mission.id, a.id, world.client.id);
+      await lifecycle.selectApplication(mission.id, b.id, world.client.id);
+
+      const assignment = await db.missionAssignment.findFirst({
+        where: { missionId: mission.id, jobberUserId: world.jobber2.id },
+      });
+      expect(assignment).toBeTruthy();
+
+      const afterCancel = await lifecycle.cancelAssignment({
+        missionId: mission.id,
+        assignmentId: assignment!.id,
+        actorUserId: world.client.id,
+        asClient: true,
+        reason: 'Désistement démo',
+      });
+      expect(afterCancel.status).toBe(MissionStatus.PUBLISHED);
+      expect(
+        await db.missionAssignment.count({
+          where: { missionId: mission.id, status: 'ACTIVE' },
+        }),
+      ).toBe(1);
+      expect(
+        (
+          await db.missionApplication.findUnique({
+            where: { id: b.id },
+          })
+        )?.status,
+      ).toBe(MissionApplicationStatus.ASSIGNMENT_CANCELLED);
     });
 
     it('rolls back everything if the application was withdrawn meanwhile', async () => {
@@ -267,9 +444,20 @@ describe('MissionLifecycleService', () => {
   });
 
   describe('payment, start, completion', () => {
-    it('markPaymentConfirmed: PAYMENT_REQUIRED → CONFIRMED with confirmedAt', async () => {
+    it('markPaymentConfirmed: publication PAYMENT_REQUIRED → PENDING_REVIEW', async () => {
       const mission = await insertMission(db, world, {
         status: MissionStatus.PAYMENT_REQUIRED,
+      });
+      const result = await lifecycle.markPaymentConfirmed(mission.id);
+      expect(result.status).toBe(MissionStatus.PENDING_REVIEW);
+      expect(result.paymentConfirmedAt).toBeInstanceOf(Date);
+      expect(historyOf(mission.id)).toEqual(['PAYMENT_REQUIRED->PENDING_REVIEW']);
+    });
+
+    it('markPaymentConfirmed: legacy post-selection → CONFIRMED', async () => {
+      const mission = await insertMission(db, world, {
+        status: MissionStatus.PAYMENT_REQUIRED,
+        publishedAt: new Date(),
         selectedJobberUserId: world.jobber.id,
       });
       const result = await lifecycle.markPaymentConfirmed(mission.id);
@@ -318,6 +506,7 @@ describe('MissionLifecycleService', () => {
         status: MissionStatus.IN_PROGRESS,
         selectedJobberUserId: world.jobber.id,
       });
+      await withAssignment(mission.id);
       const result = await lifecycle.requestCompletion(
         mission.id,
         world.jobber.id,
@@ -331,6 +520,7 @@ describe('MissionLifecycleService', () => {
         status: MissionStatus.IN_PROGRESS,
         selectedJobberUserId: world.jobber.id,
       });
+      await withAssignment(mission.id);
       await expect(
         lifecycle.requestCompletion(mission.id, world.client.id),
       ).rejects.toBeInstanceOf(ForbiddenException);
@@ -344,6 +534,7 @@ describe('MissionLifecycleService', () => {
         status: MissionStatus.CONFIRMED,
         selectedJobberUserId: world.jobber.id,
       });
+      await withAssignment(mission.id);
       await expect(
         lifecycle.requestCompletion(mission.id, world.jobber.id),
       ).rejects.toBeInstanceOf(ConflictException);
@@ -369,20 +560,25 @@ describe('MissionLifecycleService', () => {
 
     it('appends one history row per transition over the whole nominal flow', async () => {
       const mission = await insertMission(db, world);
-      await lifecycle.publish(mission.id, world.client.id);
+      await publishMissionThroughReview(
+        lifecycle,
+        mission.id,
+        world.client.id,
+        world.client.id,
+      );
       const app = await insertApplication(db, mission.id, world.jobber.id);
       await lifecycle.selectApplication(mission.id, app.id, world.client.id);
-      await lifecycle.markPaymentConfirmed(mission.id);
       await lifecycle.markReadyToStart(mission.id);
       await lifecycle.startMission(mission.id, world.jobber.id);
       await lifecycle.requestCompletion(mission.id, world.jobber.id);
       await lifecycle.completeMission(mission.id, world.jobber.id);
 
       expect(historyOf(mission.id)).toEqual([
-        'DRAFT->PUBLISHED',
+        'DRAFT->PAYMENT_REQUIRED',
+        'PAYMENT_REQUIRED->PENDING_REVIEW',
+        'PENDING_REVIEW->PUBLISHED',
         'PUBLISHED->APPLICATION_SELECTED',
-        'APPLICATION_SELECTED->PAYMENT_REQUIRED',
-        'PAYMENT_REQUIRED->CONFIRMED',
+        'APPLICATION_SELECTED->CONFIRMED',
         'CONFIRMED->READY_TO_START',
         'READY_TO_START->IN_PROGRESS',
         'IN_PROGRESS->COMPLETION_PENDING',
@@ -425,7 +621,9 @@ describe('MissionLifecycleService', () => {
       const mission = await insertMission(db, world, {
         status: MissionStatus.PAYMENT_REQUIRED,
         selectedJobberUserId: world.jobber.id,
+        workersNeeded: 1,
       });
+      await withAssignment(mission.id);
       const result = await lifecycle.cancel(mission.id, world.jobber.id, {
         reasonCode: MissionCancellationReason.JOBBER_UNAVAILABLE,
       });

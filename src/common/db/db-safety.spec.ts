@@ -72,12 +72,20 @@ describe('db-safety', () => {
     ).toThrow(/inconnu|unknown|fail-closed/i);
   });
 
-  it('test DB → test allowed', () => {
+  it('seed-demo refused against production', () => {
     expect(() =>
-      assertActionAllowed('test-db', {
-        databaseEnv: 'test',
-        databaseUrl: testUrl,
-        nodeEnv: 'test',
+      assertActionAllowed('seed-demo', {
+        databaseEnv: 'production',
+        databaseUrl: prodUrl,
+      }),
+    ).toThrow(DbSafetyError);
+  });
+
+  it('seed-demo allowed on development', () => {
+    expect(() =>
+      assertActionAllowed('seed-demo', {
+        databaseEnv: 'development',
+        databaseUrl: devUrl,
       }),
     ).not.toThrow();
   });

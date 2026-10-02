@@ -53,6 +53,11 @@ describe('JobbersService', () => {
     prisma as unknown as PrismaService,
     eligibility,
     completion,
+    {
+      loadApprovedDocumentTypeIds: jest.fn().mockResolvedValue(new Set()),
+      recomputeForUser: jest.fn().mockResolvedValue(undefined),
+      getDocumentRequirementsSummary: jest.fn(),
+    } as never,
   );
 
   const now = new Date('2026-10-01T00:00:00.000Z');

@@ -8,6 +8,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import {
+  MissionAssignmentStatus,
   MissionStatus,
   MissionVerificationType,
   type Mission,
@@ -168,10 +169,17 @@ export class MissionVerificationService {
     }
     if (mission.clientUserId === jobberUserId) {
       throw new ForbiddenException(
-        'Seul le Jobber sélectionné peut valider ce code.',
+        'Seul un Jobber affecté peut valider ce code.',
       );
     }
-    if (mission.selectedJobberUserId !== jobberUserId) {
+    const assignment = await this.prisma.missionAssignment.findFirst({
+      where: {
+        missionId,
+        jobberUserId,
+        status: MissionAssignmentStatus.ACTIVE,
+      },
+    });
+    if (!assignment) {
       throw new NotFoundException('Mission introuvable');
     }
     this.assertStatusForPhase(mission, phase);
