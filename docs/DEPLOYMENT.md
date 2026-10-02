@@ -71,6 +71,18 @@ SQL concerné : `prisma/migrations/20261001140000_auth_identity`
 | `TRUST_PROXY` | `1` |
 | `RESEND_API_KEY` | (optionnel) |
 | `EMAIL_FROM` | `KingJOBS <noreply@kingjobs.co>` |
+| `PAYMENT_PROVIDER` | `none` (jamais `mock` en prod) |
+| `STORAGE_PROVIDER` | `object_storage` (**obligatoire** ; `local_private` fait crasher le boot) |
+| `S3_ENDPOINT` | URL S3-compatible (ex. Cloudflare R2 / AWS) |
+| `S3_REGION` | ex. `auto` (R2) ou `eu-west-1` |
+| `S3_BUCKET` | bucket **privé** |
+| `S3_ACCESS_KEY_ID` | clé d’accès |
+| `S3_SECRET_ACCESS_KEY` | secret |
+| `S3_FORCE_PATH_STYLE` | `true` (souvent requis hors AWS classique) |
+
+Sans `STORAGE_PROVIDER=object_storage` + `S3_*` valides, Nest refuse de démarrer :
+
+`StorageConfigurationError: STORAGE_PROVIDER=local_private est interdit en production`.
 
 `PORT` est injecté par Render — ne pas le forcer.
 

@@ -64,6 +64,28 @@ services:
         value: https://kingjobs.co,https://www.kingjobs.co,http://localhost:3000
       - key: CORS_ORIGIN_REGEXES
         value: ^https://.*\.vercel\.app$
+      # Storage KYC / photos Mission (S3-compatible, bucket privé)
+      - key: STORAGE_PROVIDER
+        value: object_storage
+      - key: STORAGE_SIGNED_URL_TTL_SECONDS
+        value: "180"
+      - key: STORAGE_MAX_UPLOAD_BYTES
+        value: "8388608"
+      - key: S3_FORCE_PATH_STYLE
+        value: "true"
+      - key: S3_ENDPOINT
+        sync: false
+      - key: S3_REGION
+        sync: false
+      - key: S3_BUCKET
+        sync: false
+      - key: S3_ACCESS_KEY_ID
+        sync: false
+      - key: S3_SECRET_ACCESS_KEY
+        sync: false
+      # Paiement : jamais mock en production
+      - key: PAYMENT_PROVIDER
+        value: none
       # Secrets / Neon — à renseigner dans le dashboard Render (sync: false)
       - key: DATABASE_URL
         sync: false
