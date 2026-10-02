@@ -7,6 +7,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
+import { StorageConfigurationError } from '../../infrastructure/storage/file-storage.types';
 
 @Catch()
 export class GlobalExceptionFilter implements ExceptionFilter {
@@ -18,9 +19,24 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     const request = ctx.getRequest<Request & { requestId?: string }>();
 
     const isHttp = exception instanceof HttpException;
+    const isStorageConfig = exception instanceof StorageConfigurationError;
     const status = isHttp
       ? exception.getStatus()
-      : HttpStatus.INTERNAL_SERVER_ERROR;
+      : isStorageConfig
+        ? HttpStatus.SERVICE_UNAVAILABLE
+        : HttpStatus.INTERNAL_SERVER_ERROR;
+
+    if (isStorageConfig) {
+      response.status(status).json({
+        statusCode: status,
+        error: 'Service Unavailable',
+        message: exception.message,
+        path: request.url,
+        timestamp: new Date().toISOString(),
+        ...(request.requestId ? { requestId: request.requestId } : {}),
+      });
+      return;
+    }
 
     if (isHttp) {
       const payload = exception.getResponse();

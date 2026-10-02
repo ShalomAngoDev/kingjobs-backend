@@ -1,6 +1,7 @@
-import { Module } from '@nestjs/common';
+import { Logger, Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { AppConfig, StorageConfig } from '../../config/configuration';
+import { DisabledStorageProvider } from './disabled-storage.provider';
 import {
   FILE_STORAGE,
   StorageConfigurationError,
@@ -10,7 +11,29 @@ import { InMemoryStorageProvider } from './in-memory-storage.provider';
 import { LocalPrivateStorageProvider } from './local-private-storage.provider';
 import { ObjectStorageProvider } from './object-storage.provider';
 
-function createFileStorage(
+const logger = new Logger('StorageModule');
+
+const PROD_STORAGE_HINT =
+  'Renseignez S3_BUCKET, S3_REGION, S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY (et S3_ENDPOINT si R2 / MinIO).';
+
+function hasObjectStorageCredentials(storage: StorageConfig): boolean {
+  return Boolean(
+    storage.s3.bucket &&
+      storage.s3.accessKeyId &&
+      storage.s3.secretAccessKey &&
+      storage.s3.region,
+  );
+}
+
+function disabledForProduction(reason: string): FileStorageService {
+  logger.error(`${reason} ${PROD_STORAGE_HINT}`);
+  return new DisabledStorageProvider(
+    `Stockage fichiers indisponible. ${PROD_STORAGE_HINT}`,
+  );
+}
+
+/** Exporté pour tests. */
+export function createFileStorage(
   app: AppConfig,
   storage: StorageConfig,
 ): FileStorageService {
@@ -20,20 +43,20 @@ function createFileStorage(
 
   if (storage.provider === 'local_private') {
     if (app.nodeEnv === 'production') {
-      throw new StorageConfigurationError(
-        'STORAGE_PROVIDER=local_private est interdit en production. Configurez object_storage (S3-compatible) pour les pièces KYC.',
+      return disabledForProduction(
+        'STORAGE_PROVIDER=local_private est interdit en production.',
       );
     }
     return new LocalPrivateStorageProvider(storage.localPath);
   }
 
   if (storage.provider === 'object_storage') {
-    if (
-      !storage.s3.bucket ||
-      !storage.s3.accessKeyId ||
-      !storage.s3.secretAccessKey ||
-      !storage.s3.region
-    ) {
+    if (!hasObjectStorageCredentials(storage)) {
+      if (app.nodeEnv === 'production') {
+        return disabledForProduction(
+          'object_storage sans credentials S3 complets.',
+        );
+      }
       throw new StorageConfigurationError(
         'object_storage exige S3_BUCKET, S3_REGION, S3_ACCESS_KEY_ID et S3_SECRET_ACCESS_KEY.',
       );

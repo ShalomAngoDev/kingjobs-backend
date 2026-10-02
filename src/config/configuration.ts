@@ -71,6 +71,15 @@ function parseOrigins(raw: string): string[] {
   return parseList(raw);
 }
 
+/** Première valeur d'env non vide (alias S3 / AWS). */
+function firstEnv(...keys: string[]): string {
+  for (const key of keys) {
+    const value = process.env[key]?.trim();
+    if (value) return value;
+  }
+  return '';
+}
+
 function resolveSmsProvider(
   nodeEnv: AppConfig['nodeEnv'],
   raw: string | undefined,
@@ -143,11 +152,17 @@ export default (): {
         process.env.STORAGE_MAX_UPLOAD_BYTES ?? 8 * 1024 * 1024,
       ),
       s3: {
-        endpoint: process.env.S3_ENDPOINT?.trim() || null,
-        region: process.env.S3_REGION?.trim() || 'auto',
-        bucket: process.env.S3_BUCKET?.trim() || '',
-        accessKeyId: process.env.S3_ACCESS_KEY_ID?.trim() || '',
-        secretAccessKey: process.env.S3_SECRET_ACCESS_KEY?.trim() || '',
+        endpoint:
+          firstEnv('S3_ENDPOINT', 'AWS_ENDPOINT_URL', 'AWS_S3_ENDPOINT') ||
+          null,
+        region:
+          firstEnv('S3_REGION', 'AWS_REGION', 'AWS_DEFAULT_REGION') || 'auto',
+        bucket: firstEnv('S3_BUCKET', 'AWS_S3_BUCKET', 'AWS_BUCKET'),
+        accessKeyId: firstEnv('S3_ACCESS_KEY_ID', 'AWS_ACCESS_KEY_ID'),
+        secretAccessKey: firstEnv(
+          'S3_SECRET_ACCESS_KEY',
+          'AWS_SECRET_ACCESS_KEY',
+        ),
         forcePathStyle: parseBoolean(process.env.S3_FORCE_PATH_STYLE, true),
       },
     },
