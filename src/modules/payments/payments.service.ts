@@ -362,7 +362,7 @@ export class PaymentsService {
     currency: string;
     provider: string;
     providerReference: string;
-    status: PaymentStatus | string;
+    status: PaymentStatus;
     confirmedAt: Date | null;
     failedAt: Date | null;
     cancelledAt: Date | null;
@@ -396,7 +396,7 @@ export class PaymentsService {
           currency: string;
           provider: string;
           providerReference: string;
-          status: PaymentStatus | string;
+          status: PaymentStatus;
           confirmedAt: Date | null;
           failedAt: Date | null;
           cancelledAt: Date | null;

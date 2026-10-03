@@ -271,7 +271,11 @@ export function derivePricingFromMission(mission: {
     });
   }
 
-  const per = divideFcfaExactly(total, mission.workersNeeded, 'Le montant Mission');
+  const per = divideFcfaExactly(
+    total,
+    mission.workersNeeded,
+    'Le montant Mission',
+  );
   return {
     pricingType: mission.pricingType,
     rateAmount: per,

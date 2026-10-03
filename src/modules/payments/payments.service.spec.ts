@@ -43,13 +43,15 @@ describe('PaymentsService mock simulation', () => {
       },
       payment: {
         findFirst: jest.fn().mockResolvedValue(null),
-        create: jest.fn().mockImplementation(async ({ data }) => ({
-          ...data,
-          createdAt: new Date(),
-          confirmedAt: data.confirmedAt ?? null,
-          failedAt: data.failedAt ?? null,
-          cancelledAt: data.cancelledAt ?? null,
-        })),
+        create: jest.fn().mockImplementation(({ data }) =>
+          Promise.resolve({
+            ...data,
+            createdAt: new Date(),
+            confirmedAt: data.confirmedAt ?? null,
+            failedAt: data.failedAt ?? null,
+            cancelledAt: data.cancelledAt ?? null,
+          }),
+        ),
       },
     };
 
@@ -88,7 +90,7 @@ describe('PaymentsService mock simulation', () => {
       prisma as never,
       missionsService as never,
       configService,
-      provider as never,
+      provider,
     );
 
     return { service, prisma, missionsService, mission };
@@ -96,9 +98,9 @@ describe('PaymentsService mock simulation', () => {
 
   it('refuse la simulation si PAYMENT_PROVIDER ≠ mock', async () => {
     const { service } = buildService({ simulationEnabled: false });
-    await expect(service.simulateSuccess(userId, missionId)).rejects.toBeInstanceOf(
-      ForbiddenException,
-    );
+    await expect(
+      service.simulateSuccess(userId, missionId),
+    ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
   it('succès : crée Payment CONFIRMED et appelle markPaymentConfirmed', async () => {
@@ -177,17 +179,17 @@ describe('PaymentsService mock simulation', () => {
       schedulingType: 'ONCE',
       currency: 'XOF',
     });
-    await expect(service.simulateSuccess(userId, missionId)).rejects.toBeInstanceOf(
-      ForbiddenException,
-    );
+    await expect(
+      service.simulateSuccess(userId, missionId),
+    ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
   it('refuse succès hors PAYMENT_REQUIRED', async () => {
     const { service } = buildService({
       missionStatus: MissionStatus.DRAFT,
     });
-    await expect(service.simulateSuccess(userId, missionId)).rejects.toBeInstanceOf(
-      ConflictException,
-    );
+    await expect(
+      service.simulateSuccess(userId, missionId),
+    ).rejects.toBeInstanceOf(ConflictException);
   });
 });

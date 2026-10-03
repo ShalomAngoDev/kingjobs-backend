@@ -114,7 +114,10 @@ export function assertOccurrencesConsistentWithType(
   schedulingType: MissionSchedulingType,
   occurrences: OccurrenceInput[],
 ) {
-  if (schedulingType === MissionSchedulingType.ONCE && occurrences.length !== 1) {
+  if (
+    schedulingType === MissionSchedulingType.ONCE &&
+    occurrences.length !== 1
+  ) {
     throw new BadRequestException(
       'Une mission ONCE doit avoir exactement une occurrence.',
     );
@@ -139,9 +142,7 @@ export function assertOccurrencesConsistentWithType(
   for (const row of occurrences) {
     const key = row.occurrenceDate.toISOString().slice(0, 10);
     if (seen.has(key)) {
-      throw new BadRequestException(
-        'Chaque date de mission doit être unique.',
-      );
+      throw new BadRequestException('Chaque date de mission doit être unique.');
     }
     seen.add(key);
   }

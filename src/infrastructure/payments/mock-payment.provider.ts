@@ -18,27 +18,25 @@ export class MockPaymentProvider implements PaymentProvider {
   readonly id = MOCK_PAYMENT_PROVIDER;
   private readonly logger = new Logger(MockPaymentProvider.name);
 
-  async initialize(
-    input: InitializePaymentInput,
-  ): Promise<InitializePaymentResult> {
+  initialize(input: InitializePaymentInput): Promise<InitializePaymentResult> {
     const providerReference = `MOCK:${input.missionId}:${randomUUID()}`;
     this.logger.log(
       `MOCK PAYMENT initialize mission=${input.missionId} amount=${input.amount} ${input.currency} ref=${providerReference}`,
     );
-    return {
+    return Promise.resolve({
       provider: this.id,
       providerReference,
       status: PaymentStatus.PENDING,
       amount: input.amount,
       currency: input.currency,
-    };
+    });
   }
 
-  async verifyConfirmation(input: ConfirmPaymentInput): Promise<boolean> {
+  verifyConfirmation(input: ConfirmPaymentInput): Promise<boolean> {
     const ok = input.providerReference.startsWith('MOCK:');
     this.logger.log(
       `MOCK PAYMENT verify mission=${input.missionId} ref=${input.providerReference} ok=${ok}`,
     );
-    return ok;
+    return Promise.resolve(ok);
   }
 }

@@ -34,7 +34,10 @@ export type Tx = Prisma.TransactionClient;
 export const MISSION_TRANSITIONS: Readonly<
   Record<MissionStatus, readonly MissionStatus[]>
 > = {
-  [MissionStatus.DRAFT]: [MissionStatus.PAYMENT_REQUIRED, MissionStatus.CANCELLED],
+  [MissionStatus.DRAFT]: [
+    MissionStatus.PAYMENT_REQUIRED,
+    MissionStatus.CANCELLED,
+  ],
   [MissionStatus.PAYMENT_REQUIRED]: [
     MissionStatus.PENDING_REVIEW,
     MissionStatus.CONFIRMED,
@@ -247,7 +250,8 @@ export class MissionLifecycleService {
           categoryNameSnapshot: service.category.name,
           categorySlugSnapshot: service.category.slug,
           minimumAge: computeMinimumAge(service.minimumAge, mission.riskFlags),
-          reviewInternalNote: internalNote?.trim() || mission.reviewInternalNote,
+          reviewInternalNote:
+            internalNote?.trim() || mission.reviewInternalNote,
         },
       });
       return this.reload(db, missionId);
@@ -412,8 +416,7 @@ export class MissionLifecycleService {
           mission.workersNeeded > 1 &&
           mission.clientPriceAmount % mission.workersNeeded === 0
         ) {
-          workerGrossAmount =
-            mission.clientPriceAmount / mission.workersNeeded;
+          workerGrossAmount = mission.clientPriceAmount / mission.workersNeeded;
         }
       }
 
@@ -520,7 +523,8 @@ export class MissionLifecycleService {
           to: MissionStatus.PAYMENT_REQUIRED,
           actorUserId: clientUserId,
           actorType: MissionActorType.SYSTEM,
-          reason: 'Legacy : paiement post-sélection (mission sans paymentConfirmedAt)',
+          reason:
+            'Legacy : paiement post-sélection (mission sans paymentConfirmedAt)',
         });
       }
 
@@ -604,7 +608,10 @@ export class MissionLifecycleService {
       });
 
       const remainingActive = await db.missionAssignment.findMany({
-        where: { missionId: input.missionId, status: MissionAssignmentStatus.ACTIVE },
+        where: {
+          missionId: input.missionId,
+          status: MissionAssignmentStatus.ACTIVE,
+        },
         orderBy: { selectedAt: 'asc' },
         select: { jobberUserId: true },
       });
@@ -633,8 +640,7 @@ export class MissionLifecycleService {
           reason: 'Place libérée après annulation d’affectation',
           metadata: {
             assignmentId: assignment.id,
-            remainingWorkers:
-              mission.workersNeeded - remainingActive.length,
+            remainingWorkers: mission.workersNeeded - remainingActive.length,
           },
           data: { confirmedAt: null },
         });

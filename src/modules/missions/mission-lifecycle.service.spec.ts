@@ -106,7 +106,9 @@ describe('MissionLifecycleService', () => {
         MissionStatus.COMPLETED,
       ];
       for (let i = 0; i < executionPath.length - 1; i += 1) {
-        expect(canTransition(executionPath[i], executionPath[i + 1])).toBe(true);
+        expect(canTransition(executionPath[i], executionPath[i + 1])).toBe(
+          true,
+        );
       }
     });
   });
@@ -451,7 +453,9 @@ describe('MissionLifecycleService', () => {
       const result = await lifecycle.markPaymentConfirmed(mission.id);
       expect(result.status).toBe(MissionStatus.PENDING_REVIEW);
       expect(result.paymentConfirmedAt).toBeInstanceOf(Date);
-      expect(historyOf(mission.id)).toEqual(['PAYMENT_REQUIRED->PENDING_REVIEW']);
+      expect(historyOf(mission.id)).toEqual([
+        'PAYMENT_REQUIRED->PENDING_REVIEW',
+      ]);
     });
 
     it('markPaymentConfirmed: legacy post-selection → CONFIRMED', async () => {

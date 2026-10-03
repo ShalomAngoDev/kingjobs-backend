@@ -54,7 +54,6 @@ import {
   serializeMissionForUser,
   serializeMissionMedia,
   serializeMissionOccurrence,
-  serializeMissionPublic,
   serializePaymentAdmin,
   serializeMissionWithAddress,
   serializeMissionWithStaffing,
@@ -63,7 +62,11 @@ import { computeStaffing } from './mission-staffing';
 import { assertMissionReadyForReview } from './mission-readiness';
 import { parseDateOnly } from './mission-scheduling';
 import { toOccurrenceCreateMany } from './mission-scheduling';
-import { resolveCreateShape, resolveUpdatePricing, resolveUpdateScheduleShape } from './mission-shape';
+import {
+  resolveCreateShape,
+  resolveUpdatePricing,
+  resolveUpdateScheduleShape,
+} from './mission-shape';
 
 /** Champs critiques interdits dès PUBLISHED (BO04.1). */
 const DRAFT_ONLY_FIELDS = [
@@ -410,8 +413,7 @@ export class MissionsService {
           scheduleShape?.estimatedDurationMinutes ??
           mission.estimatedDurationMinutes,
         durationKnown: scheduleShape?.durationKnown ?? mission.durationKnown,
-        schedulingType:
-          scheduleShape?.schedulingType ?? mission.schedulingType,
+        schedulingType: scheduleShape?.schedulingType ?? mission.schedulingType,
         occurrenceCount: Math.max(1, occurrenceCount),
       },
       dto,
@@ -807,7 +809,9 @@ export class MissionsService {
             orderBy: [{ sortOrder: 'asc' }, { occurrenceDate: 'asc' }],
           }),
         ]);
-      const people = await this.loadPeople(assignments.map((a) => a.jobberUserId));
+      const people = await this.loadPeople(
+        assignments.map((a) => a.jobberUserId),
+      );
       return {
         ...serializeMissionWithStaffing(mission, activeCount),
         viewerRole: 'CLIENT' as const,
@@ -928,7 +932,11 @@ export class MissionsService {
    * Contenu binaire d'une photo Mission (Jobber candidat / Client / Jobber affecté).
    * Jamais de storageKey exposé.
    */
-  async getMissionMediaContent(userId: string, missionId: string, mediaId: string) {
+  async getMissionMediaContent(
+    userId: string,
+    missionId: string,
+    mediaId: string,
+  ) {
     await this.assertCanViewMissionMedia(userId, missionId);
     const media = await this.prisma.missionMedia.findFirst({
       where: { id: mediaId, missionId },
@@ -976,7 +984,9 @@ export class MissionsService {
       );
     }
 
-    const count = await this.prisma.missionMedia.count({ where: { missionId } });
+    const count = await this.prisma.missionMedia.count({
+      where: { missionId },
+    });
     if (count >= MISSION_LIMITS.MAX_MISSION_MEDIA) {
       throw new BadRequestException(
         `Vous pouvez ajouter jusqu'à ${MISSION_LIMITS.MAX_MISSION_MEDIA} photos.`,
@@ -1043,11 +1053,7 @@ export class MissionsService {
   }
 
   /** Supprime MissionMedia + objet storage (owner, DRAFT / NEEDS_CHANGES). */
-  async deleteMissionMedia(
-    userId: string,
-    missionId: string,
-    mediaId: string,
-  ) {
+  async deleteMissionMedia(userId: string, missionId: string, mediaId: string) {
     const mission = await this.requireOwned(userId, missionId);
     if (
       mission.status !== MissionStatus.DRAFT &&
@@ -1083,7 +1089,8 @@ export class MissionsService {
       and.push({ selectedJobberUserId: query.selectedJobberUserId });
     }
     if (query.pricingType) and.push({ pricingType: query.pricingType });
-    if (query.schedulingType) and.push({ schedulingType: query.schedulingType });
+    if (query.schedulingType)
+      and.push({ schedulingType: query.schedulingType });
     if (query.city) {
       and.push({ city: { equals: query.city, mode: 'insensitive' } });
     }
@@ -1099,16 +1106,12 @@ export class MissionsService {
         ],
       });
     }
-    const where: Prisma.MissionWhereInput =
-      and.length > 0 ? { AND: and } : {};
+    const where: Prisma.MissionWhereInput = and.length > 0 ? { AND: and } : {};
 
     const [items, total] = await Promise.all([
       this.prisma.mission.findMany({
         where,
-        orderBy: [
-          { submittedForReviewAt: 'desc' },
-          { createdAt: 'desc' },
-        ],
+        orderBy: [{ submittedForReviewAt: 'desc' }, { createdAt: 'desc' }],
         skip,
         take: limit,
         include: {

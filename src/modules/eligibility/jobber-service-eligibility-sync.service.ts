@@ -141,7 +141,9 @@ export class JobberServiceEligibilitySync {
           slug: js.service.slug,
         };
         if (existing) {
-          if (!existing.requiredForServices.some((s) => s.id === serviceRef.id)) {
+          if (
+            !existing.requiredForServices.some((s) => s.id === serviceRef.id)
+          ) {
             existing.requiredForServices.push(serviceRef);
           }
         } else {

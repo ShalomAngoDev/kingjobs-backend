@@ -77,9 +77,7 @@ export class AuthService {
     return this.configService.getOrThrow<AuthConfig>('auth');
   }
 
-  private phoneRegion(
-    countryCode?: string | null,
-  ): SupportedCountryCode {
+  private phoneRegion(countryCode?: string | null): SupportedCountryCode {
     if (isSupportedCountryCode(countryCode)) {
       return countryCode;
     }
@@ -407,7 +405,12 @@ export class AuthService {
     const message =
       'Si un compte existe pour cet email, un lien de vérification a été envoyé.';
 
-    if (!user || user.emailVerifiedAt || user.status === UserStatus.CLOSED || !user.email) {
+    if (
+      !user ||
+      user.emailVerifiedAt ||
+      user.status === UserStatus.CLOSED ||
+      !user.email
+    ) {
       return { message };
     }
 

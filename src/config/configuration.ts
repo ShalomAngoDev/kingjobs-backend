@@ -147,7 +147,9 @@ export default (): {
       provider: storageProvider,
       localPath:
         process.env.FILE_STORAGE_PATH?.trim() || './.data/private-uploads',
-      signedUrlTtlSeconds: Number(process.env.STORAGE_SIGNED_URL_TTL_SECONDS ?? 180),
+      signedUrlTtlSeconds: Number(
+        process.env.STORAGE_SIGNED_URL_TTL_SECONDS ?? 180,
+      ),
       maxUploadBytes: Number(
         process.env.STORAGE_MAX_UPLOAD_BYTES ?? 8 * 1024 * 1024,
       ),

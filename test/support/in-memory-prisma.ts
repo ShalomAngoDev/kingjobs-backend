@@ -132,7 +132,9 @@ class Table {
         null;
       if (client && isPlainObject(args.include.client.select)) {
         const selected: Row = {};
-        for (const [key, enabled] of Object.entries(args.include.client.select)) {
+        for (const [key, enabled] of Object.entries(
+          args.include.client.select,
+        )) {
           if (enabled) selected[key] = client[key];
         }
         copy.client = selected;

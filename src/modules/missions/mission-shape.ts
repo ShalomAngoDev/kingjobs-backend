@@ -8,10 +8,7 @@ import {
 import { MISSION_LIMITS } from '../../common/constants/mission-limits';
 import type { CreateMissionDto } from './dto/create-mission.dto';
 import type { UpdateMissionDto } from './dto/update-mission.dto';
-import {
-  computeMissionPricing,
-  type PricingComputed,
-} from './mission-pricing';
+import { computeMissionPricing, type PricingComputed } from './mission-pricing';
 import {
   buildOccurrences,
   combineDateAndTime,
@@ -49,7 +46,9 @@ function resolveRateAmount(dto: {
   );
 }
 
-export function resolveCreateShape(dto: CreateMissionDto): ResolvedMissionShape {
+export function resolveCreateShape(
+  dto: CreateMissionDto,
+): ResolvedMissionShape {
   const workersNeeded = dto.workersNeeded ?? 1;
   const pricingType = dto.pricingType ?? MissionPricingType.FIXED;
   const rateScope = dto.rateScope ?? MissionRateScope.PER_JOBBER;
@@ -62,7 +61,10 @@ export function resolveCreateShape(dto: CreateMissionDto): ResolvedMissionShape 
   let scheduledStartAt: Date | null = null;
 
   if (dto.scheduleStartDate) {
-    scheduleStartDate = parseDateOnly(dto.scheduleStartDate, 'scheduleStartDate');
+    scheduleStartDate = parseDateOnly(
+      dto.scheduleStartDate,
+      'scheduleStartDate',
+    );
     scheduleEndDate = dto.scheduleEndDate
       ? parseDateOnly(dto.scheduleEndDate, 'scheduleEndDate')
       : scheduleStartDate;
@@ -73,7 +75,9 @@ export function resolveCreateShape(dto: CreateMissionDto): ResolvedMissionShape 
       throw new BadRequestException('Date de début invalide.');
     }
     if (scheduledStartAt.getTime() <= Date.now()) {
-      throw new BadRequestException('La date de début doit être dans le futur.');
+      throw new BadRequestException(
+        'La date de début doit être dans le futur.',
+      );
     }
     scheduleStartDate = new Date(
       Date.UTC(
@@ -238,7 +242,7 @@ export function resolveUpdateScheduleShape(
 
   const startTime =
     dto.startTime !== undefined
-      ? dto.startTime ?? undefined
+      ? (dto.startTime ?? undefined)
       : current.scheduledStartAt
         ? formatTimeHmUtc(current.scheduledStartAt)
         : undefined;
@@ -263,23 +267,23 @@ export function resolveUpdateScheduleShape(
     startTime,
     scheduledStartAt:
       dto.scheduledStartAt !== undefined
-        ? dto.scheduledStartAt ?? undefined
+        ? (dto.scheduledStartAt ?? undefined)
         : undefined,
     selectedWeekdays: dto.selectedWeekdays ?? current.selectedWeekdays,
     durationKnown: dto.durationKnown ?? current.durationKnown,
     estimatedDurationMinutes:
       dto.estimatedDurationMinutes !== undefined
-        ? dto.estimatedDurationMinutes ?? undefined
-        : current.estimatedDurationMinutes ?? undefined,
+        ? (dto.estimatedDurationMinutes ?? undefined)
+        : (current.estimatedDurationMinutes ?? undefined),
     scheduleSameHoursDaily:
       dto.scheduleSameHoursDaily !== undefined
-        ? dto.scheduleSameHoursDaily ?? undefined
-        : current.scheduleSameHoursDaily ?? undefined,
+        ? (dto.scheduleSameHoursDaily ?? undefined)
+        : (current.scheduleSameHoursDaily ?? undefined),
     occurrences: dto.occurrences,
     locationNotes:
       dto.locationNotes !== undefined
-        ? dto.locationNotes ?? undefined
-        : current.locationNotes ?? undefined,
+        ? (dto.locationNotes ?? undefined)
+        : (current.locationNotes ?? undefined),
   } as CreateMissionDto;
 
   return resolveCreateShape(createLike);

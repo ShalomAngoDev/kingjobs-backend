@@ -354,7 +354,15 @@ export class CatalogService {
     }
 
     const all = await this.prisma.documentType.findMany({
-      select: { id: true, name: true, code: true, isActive: true, description: true, createdAt: true, updatedAt: true },
+      select: {
+        id: true,
+        name: true,
+        code: true,
+        isActive: true,
+        description: true,
+        createdAt: true,
+        updatedAt: true,
+      },
     });
     const normalized = normalizeDocumentTypeName(name);
     const byName = all.find(

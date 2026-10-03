@@ -15,14 +15,16 @@ import {
 class DisabledPaymentProvider implements PaymentProvider {
   readonly id = 'NONE';
 
-  async initialize(): Promise<never> {
-    throw new PaymentConfigurationError(
-      'Aucun fournisseur de paiement actif (PAYMENT_PROVIDER ≠ mock).',
+  initialize(): Promise<never> {
+    return Promise.reject(
+      new PaymentConfigurationError(
+        'Aucun fournisseur de paiement actif (PAYMENT_PROVIDER ≠ mock).',
+      ),
     );
   }
 
-  async verifyConfirmation(): Promise<boolean> {
-    return false;
+  verifyConfirmation(): Promise<boolean> {
+    return Promise.resolve(false);
   }
 }
 

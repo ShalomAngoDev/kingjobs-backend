@@ -592,8 +592,7 @@ export class JobbersService {
 
     const photoDocumentId = photoMap.get(userId) ?? null;
     const globallyVerified =
-      user.identityVerificationStatus ===
-        IdentityVerificationStatus.VERIFIED &&
+      user.identityVerificationStatus === IdentityVerificationStatus.VERIFIED &&
       profile.status === JobberStatus.ACTIVE;
 
     const primaryServices = services.slice(0, 2).map((s) => ({

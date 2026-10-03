@@ -16,7 +16,13 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { ApiBearerAuth, ApiBody, ApiConsumes, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiConsumes,
+  ApiOperation,
+  ApiTags,
+} from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import type { Response } from 'express';
 import { MissionVerificationType } from '@prisma/client';
@@ -107,7 +113,9 @@ export class MissionsController {
 
   @Post(':id/media')
   @HttpCode(HttpStatus.CREATED)
-  @ApiOperation({ summary: 'Ajouter une photo à une mission (DRAFT / NEEDS_CHANGES)' })
+  @ApiOperation({
+    summary: 'Ajouter une photo à une mission (DRAFT / NEEDS_CHANGES)',
+  })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
     schema: {
@@ -142,7 +150,9 @@ export class MissionsController {
 
   @Delete(':id/media/:mediaId')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Supprimer une photo de mission (DRAFT / NEEDS_CHANGES)' })
+  @ApiOperation({
+    summary: 'Supprimer une photo de mission (DRAFT / NEEDS_CHANGES)',
+  })
   deleteMedia(
     @CurrentUser() user: AuthenticatedUser,
     @Param('id', ParseUUIDPipe) id: string,

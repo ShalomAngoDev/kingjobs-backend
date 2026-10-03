@@ -429,7 +429,8 @@ export const DOCUMENT_TYPE_SEEDS = [
   {
     code: 'LIVE_SELFIE',
     name: 'Selfie live',
-    description: 'Selfie capturé en direct depuis l’application pour vérification humaine.',
+    description:
+      'Selfie capturé en direct depuis l’application pour vérification humaine.',
   },
   {
     code: 'PROFILE_PHOTO',

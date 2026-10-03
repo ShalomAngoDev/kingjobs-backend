@@ -85,7 +85,8 @@ export class MissionIncidentsService {
             status: MissionAssignmentStatus.ACTIVE,
           },
         });
-    const isJobber = Boolean(assignment) || mission.selectedJobberUserId === userId;
+    const isJobber =
+      Boolean(assignment) || mission.selectedJobberUserId === userId;
     if (!isClient && !isJobber) {
       throw new NotFoundException('Mission introuvable');
     }

@@ -26,7 +26,8 @@ export class PaymentsController {
 
   @Get(':id/payment')
   @ApiOperation({
-    summary: 'Récapitulatif paiement Mission (montant Backend + mode simulation)',
+    summary:
+      'Récapitulatif paiement Mission (montant Backend + mode simulation)',
   })
   getPayment(
     @CurrentUser() user: AuthenticatedUser,

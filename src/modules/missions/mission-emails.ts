@@ -30,7 +30,8 @@ export function buildMissionReviewEmail(input: {
   }
 
   if (input.kind === 'needs_changes') {
-    const subject = 'Une modification est nécessaire pour votre mission KingJOBS';
+    const subject =
+      'Une modification est nécessaire pour votre mission KingJOBS';
     const reason =
       input.userMessage?.trim() ||
       'Des informations doivent être complétées avant publication.';

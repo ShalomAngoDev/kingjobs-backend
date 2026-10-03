@@ -131,7 +131,7 @@ export class JobberEligibilityService {
         }
         const approved = Boolean(
           requirement.documentTypeId &&
-            ctx.approvedDocumentTypeIds?.has(requirement.documentTypeId),
+          ctx.approvedDocumentTypeIds?.has(requirement.documentTypeId),
         );
         if (approved) {
           continue;

@@ -54,8 +54,6 @@ export function getSupportedCountry(
   return found ?? SUPPORTED_COUNTRIES[0];
 }
 
-export function toLibPhoneCountry(
-  code: SupportedCountryCode,
-): CountryCode {
+export function toLibPhoneCountry(code: SupportedCountryCode): CountryCode {
   return code;
 }

@@ -90,9 +90,7 @@ describe('VerificationsService', () => {
       } as never,
       {
         recomputeForUser: jest.fn().mockResolvedValue(undefined),
-        loadApprovedDocumentTypeIds: jest
-          .fn()
-          .mockResolvedValue(new Set()),
+        loadApprovedDocumentTypeIds: jest.fn().mockResolvedValue(new Set()),
         getDocumentRequirementsSummary: jest.fn(),
       } as never,
       {
@@ -372,7 +370,9 @@ describe('VerificationsService', () => {
           status: 'PENDING_ELIGIBILITY',
         },
       });
-      await db.documentType.create({ data: { code: 'DIPLOMA', name: 'Diplôme' } });
+      await db.documentType.create({
+        data: { code: 'DIPLOMA', name: 'Diplôme' },
+      });
       const cv = await upload(user.id, 'CV', {
         mimeType: 'application/pdf',
         fileBuffer: pdf(),
@@ -729,9 +729,9 @@ describe('VerificationsService', () => {
         kind: VerificationCaseKind.JOBBER_PROFILE,
         status: VerificationCaseStatus.PENDING,
       });
-      expect(db.user.rows.find((u) => u.id === user.id)?.identityVerificationStatus).toBe(
-        IdentityVerificationStatus.PENDING,
-      );
+      expect(
+        db.user.rows.find((u) => u.id === user.id)?.identityVerificationStatus,
+      ).toBe(IdentityVerificationStatus.PENDING);
       expect(db.jobberProfile.rows[0].status).toBe(
         JobberStatus.PENDING_VERIFICATION,
       );
@@ -785,13 +785,16 @@ describe('VerificationsService', () => {
       await approveIdentityDocs(docs);
 
       await service.adminApproveCase(verificationCase.id, admin.id);
-      expect(db.user.rows.find((u) => u.id === user.id)?.identityVerificationStatus).toBe(
-        IdentityVerificationStatus.VERIFIED,
-      );
+      expect(
+        db.user.rows.find((u) => u.id === user.id)?.identityVerificationStatus,
+      ).toBe(IdentityVerificationStatus.VERIFIED);
       expect(db.jobberProfile.rows[0].status).toBe(JobberStatus.ACTIVE);
       expect(
         db.verificationCase.rows
-          .filter((c) => c.userId === user.id && c.kind === VerificationCaseKind.IDENTITY)
+          .filter(
+            (c) =>
+              c.userId === user.id && c.kind === VerificationCaseKind.IDENTITY,
+          )
           .every((c) => c.status === VerificationCaseStatus.APPROVED),
       ).toBe(true);
     });
@@ -867,7 +870,12 @@ describe('VerificationsService', () => {
       await db.jobberProfile.create({
         data: { userId: user.id, status: JobberStatus.DRAFT },
       });
-      for (const code of ['DIPLOMA', 'CERTIFICATE', 'OTHER_PROOF', 'SERVICE_PROOF']) {
+      for (const code of [
+        'DIPLOMA',
+        'CERTIFICATE',
+        'OTHER_PROOF',
+        'SERVICE_PROOF',
+      ]) {
         await db.documentType.create({ data: { code, name: code } });
       }
       // 5 pièces pro rattachées au même dossier Jobber (pas 5 dossiers)

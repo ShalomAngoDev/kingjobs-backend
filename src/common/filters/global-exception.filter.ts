@@ -78,7 +78,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
           record.message &&
           typeof record.message === 'object' &&
           record.message !== null &&
-          'message' in (record.message as object) &&
+          'message' in record.message &&
           typeof (record.message as { message?: unknown }).message === 'string'
         ) {
           message = (record.message as { message: string }).message;
@@ -86,15 +86,14 @@ export class GlobalExceptionFilter implements ExceptionFilter {
           message = record.error;
         }
 
-        const reasons =
-          Array.isArray(record.reasons)
-            ? record.reasons
-            : record.message &&
-                typeof record.message === 'object' &&
-                record.message !== null &&
-                Array.isArray((record.message as { reasons?: unknown }).reasons)
-              ? (record.message as { reasons: unknown[] }).reasons
-              : null;
+        const reasons = Array.isArray(record.reasons)
+          ? record.reasons
+          : record.message &&
+              typeof record.message === 'object' &&
+              record.message !== null &&
+              Array.isArray((record.message as { reasons?: unknown }).reasons)
+            ? (record.message as { reasons: unknown[] }).reasons
+            : null;
 
         response.status(status).json({
           statusCode: status,

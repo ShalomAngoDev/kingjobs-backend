@@ -34,7 +34,9 @@ export class UpdateMeDto {
   /** Date de naissance ISO (YYYY-MM-DD). Requis pour le parcours Jobber / KYC. */
   @ApiPropertyOptional({ example: '1998-05-12' })
   @IsOptional()
-  @ValidateIf((_, v) => v !== null && v !== undefined && String(v).trim() !== '')
+  @ValidateIf(
+    (_, v) => v !== null && v !== undefined && String(v).trim() !== '',
+  )
   @IsDateString()
   dateOfBirth?: string | null;
 }

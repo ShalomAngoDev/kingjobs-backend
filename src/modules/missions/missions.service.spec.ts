@@ -451,9 +451,9 @@ describe('MissionsService', () => {
         status: MissionStatus.PUBLISHED,
         minimumAge: 18,
       });
-      const asClient = await service.listAvailable(world.client.id, {}).catch(
-        (e: unknown) => e,
-      );
+      const asClient = await service
+        .listAvailable(world.client.id, {})
+        .catch((e: unknown) => e);
       expect(asClient).toBeInstanceOf(ForbiddenException);
 
       const minor = await createUser(db, {
@@ -463,9 +463,9 @@ describe('MissionsService', () => {
         data: { userId: minor.id, status: JobberStatus.DRAFT },
       });
       // Browse autorisé même si âge < minimumAge (gate à la candidature).
-      expect((await service.listAvailable(minor.id, {})).total).toBeGreaterThanOrEqual(
-        1,
-      );
+      expect(
+        (await service.listAvailable(minor.id, {})).total,
+      ).toBeGreaterThanOrEqual(1);
     });
 
     it('filters by city case-insensitively and by service', async () => {

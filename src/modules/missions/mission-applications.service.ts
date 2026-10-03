@@ -405,7 +405,11 @@ export class MissionApplicationsService {
       clientUserId,
     );
 
-    await this.notifyJobberSelected(updated, application.jobberUserId, applicationId);
+    await this.notifyJobberSelected(
+      updated,
+      application.jobberUserId,
+      applicationId,
+    );
 
     // Autres candidatures clôturées MISSION_FILLED : notifier sans présenter comme un rejet.
     const filledApps = await this.prisma.missionApplication.findMany({
@@ -653,7 +657,9 @@ export class MissionApplicationsService {
   }
 }
 
-function applicationStatusLabelForJobber(status: MissionApplicationStatus): string {
+function applicationStatusLabelForJobber(
+  status: MissionApplicationStatus,
+): string {
   switch (status) {
     case MissionApplicationStatus.PENDING:
       return 'Candidature envoyée, en attente de réponse du Client.';

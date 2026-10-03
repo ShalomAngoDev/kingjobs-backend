@@ -41,7 +41,9 @@ export class RegisterDto {
 
   @ApiPropertyOptional({ example: 'aicha@example.com' })
   @IsOptional()
-  @ValidateIf((_, v) => v !== undefined && v !== null && String(v).trim() !== '')
+  @ValidateIf(
+    (_, v) => v !== undefined && v !== null && String(v).trim() !== '',
+  )
   @IsEmail({}, { message: 'Email invalide' })
   @MaxLength(320)
   email?: string | null;
@@ -55,7 +57,9 @@ export class RegisterDto {
   /** Optionnel WEBAPP-01 : demandé plus tard en complétion profil. */
   @ApiPropertyOptional({ example: '2005-06-15' })
   @IsOptional()
-  @ValidateIf((_, v) => v !== undefined && v !== null && String(v).trim() !== '')
+  @ValidateIf(
+    (_, v) => v !== undefined && v !== null && String(v).trim() !== '',
+  )
   @IsDateString({}, { message: 'Date de naissance invalide' })
   dateOfBirth?: string | null;
 

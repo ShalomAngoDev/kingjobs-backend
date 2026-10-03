@@ -192,8 +192,7 @@ export class VerificationsService {
 
     const completion = this.completionOf(documents);
     const globallyVerified =
-      user.identityVerificationStatus ===
-        IdentityVerificationStatus.VERIFIED &&
+      user.identityVerificationStatus === IdentityVerificationStatus.VERIFIED &&
       jobberProfile?.status === JobberStatus.ACTIVE;
 
     return {
@@ -752,7 +751,11 @@ export class VerificationsService {
     // Complétude par dossier (pas une file documents indépendante).
     const docsByUser = new Map<
       string,
-      Array<{ documentTypeCode: string; status: UserDocumentStatus; caseId: string | null }>
+      Array<{
+        documentTypeCode: string;
+        status: UserDocumentStatus;
+        caseId: string | null;
+      }>
     >();
     if (cases.length > 0) {
       const loaded = await Promise.all(
@@ -914,8 +917,12 @@ export class VerificationsService {
       ),
     );
 
-    const mandatoryDocs = serializedDocs.filter((d) => d.requirement?.mandatory);
-    const optionalDocs = serializedDocs.filter((d) => !d.requirement?.mandatory);
+    const mandatoryDocs = serializedDocs.filter(
+      (d) => d.requirement?.mandatory,
+    );
+    const optionalDocs = serializedDocs.filter(
+      (d) => !d.requirement?.mandatory,
+    );
     const documentsReviewSummary = {
       received: serializedDocs.length,
       mandatoryApproved: mandatoryDocs.filter(
@@ -1021,7 +1028,7 @@ export class VerificationsService {
         }
         const profile = await this.requireJobberProfile(tx, user.id);
         assertJobberTransition(profile.status, JobberStatus.ACTIVE);
-        await this.assertJobberCaseReadyForApproval(tx, profile.id, user.id);
+        await this.assertJobberCaseReadyForApproval(tx, profile.id);
       }
 
       await this.claimCase(tx, verificationCase, {
@@ -1901,7 +1908,6 @@ export class VerificationsService {
   private async assertJobberCaseReadyForApproval(
     db: Db | PrismaService,
     jobberProfileId: string,
-    _userId: string,
   ): Promise<void> {
     const profile = await db.jobberProfile.findUnique({
       where: { id: jobberProfileId },

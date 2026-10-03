@@ -1,6 +1,4 @@
-import {
-  createFileStorage,
-} from './storage.module';
+import { createFileStorage } from './storage.module';
 import { DisabledStorageProvider } from './disabled-storage.provider';
 import { LocalPrivateStorageProvider } from './local-private-storage.provider';
 import { ObjectStorageProvider } from './object-storage.provider';

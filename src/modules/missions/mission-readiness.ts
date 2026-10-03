@@ -12,10 +12,7 @@ import { MISSION_LIMITS } from '../../common/constants/mission-limits';
 import { assertUserCanOperateAsClient } from '../verifications/operational-gates';
 
 /** Validations objectives avant soumission paiement / revue / publication. */
-type MissionReadinessDb = Pick<
-  PrismaClient,
-  'user' | 'missionOccurrence'
->;
+type MissionReadinessDb = Pick<PrismaClient, 'user' | 'missionOccurrence'>;
 
 export async function assertMissionReadyForReview(
   prisma: MissionReadinessDb,
@@ -55,7 +52,10 @@ export async function assertMissionReadyForReview(
     if (mission.clientPriceAmount < MISSION_LIMITS.MIN_PRICE_XOF) {
       throw new ConflictException('Prix mission invalide.');
     }
-  } else if (!mission.rateAmount || mission.rateAmount < MISSION_LIMITS.MIN_PRICE_XOF) {
+  } else if (
+    !mission.rateAmount ||
+    mission.rateAmount < MISSION_LIMITS.MIN_PRICE_XOF
+  ) {
     throw new ConflictException('Tarif horaire/journalier requis.');
   }
 

@@ -10,7 +10,9 @@ export function buildVerificationDecisionEmail(input: {
 }): { subject: string; text: string; html: string } {
   const name = input.firstName.trim() || 'Bonjour';
   const isJobber = input.caseKind === 'JOBBER_PROFILE';
-  const scope = isJobber ? 'votre profil Jobber KingJOBS' : 'votre identité KingJOBS';
+  const scope = isJobber
+    ? 'votre profil Jobber KingJOBS'
+    : 'votre identité KingJOBS';
 
   if (input.kind === 'approved') {
     const subject = isJobber
@@ -36,7 +38,9 @@ export function buildVerificationDecisionEmail(input: {
 
   if (input.kind === 'needs_changes') {
     const subject = 'Une action est nécessaire sur votre profil KingJOBS';
-    const reason = input.userMessage?.trim() || 'Des informations doivent être mises à jour.';
+    const reason =
+      input.userMessage?.trim() ||
+      'Des informations doivent être mises à jour.';
     const text = [
       `Bonjour ${name},`,
       '',
@@ -54,7 +58,9 @@ export function buildVerificationDecisionEmail(input: {
   }
 
   const subject = 'Mise à jour concernant votre dossier KingJOBS';
-  const reason = input.userMessage?.trim() || 'Votre dossier ne peut pas être validé dans son état actuel.';
+  const reason =
+    input.userMessage?.trim() ||
+    'Votre dossier ne peut pas être validé dans son état actuel.';
   const text = [
     `Bonjour ${name},`,
     '',

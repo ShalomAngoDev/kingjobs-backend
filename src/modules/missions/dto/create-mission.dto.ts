@@ -177,7 +177,8 @@ export class CreateMissionDto {
   scheduleSameHoursDaily?: boolean | null;
 
   @ApiPropertyOptional({
-    description: 'Legacy ISO : date+heure unique (ONCE). Priorité : scheduleStartDate+startTime.',
+    description:
+      'Legacy ISO : date+heure unique (ONCE). Priorité : scheduleStartDate+startTime.',
   })
   @IsOptional()
   @IsDateString()

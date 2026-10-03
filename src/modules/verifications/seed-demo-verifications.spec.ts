@@ -1,7 +1,4 @@
-import {
-  assertActionAllowed,
-  DbSafetyError,
-} from '../../common/db/db-safety';
+import { assertActionAllowed, DbSafetyError } from '../../common/db/db-safety';
 import {
   DEMO_CLIENT_EMAIL,
   DEMO_JOBBER_EMAIL,
@@ -17,7 +14,8 @@ describe('seed demo verifications safeguards', () => {
     expect(() =>
       assertActionAllowed('seed-demo', {
         databaseEnv: 'production',
-        databaseUrl: 'postgresql://u:p@ep-prod.neon.tech/neondb?sslmode=require',
+        databaseUrl:
+          'postgresql://u:p@ep-prod.neon.tech/neondb?sslmode=require',
       }),
     ).toThrow(DbSafetyError);
   });

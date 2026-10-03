@@ -5,7 +5,6 @@ import {
 } from '@nestjs/common';
 import {
   AdminAuditAction,
-  MissionActorType,
   MissionRejectionReason,
   MissionReviewChangeArea,
   MissionStatus,
@@ -73,7 +72,9 @@ export class MissionReviewService {
       throw new ConflictException('Le message au Client est obligatoire.');
     }
     if (input.areas.length === 0) {
-      throw new ConflictException('Sélectionnez au moins un élément à corriger.');
+      throw new ConflictException(
+        'Sélectionnez au moins un élément à corriger.',
+      );
     }
 
     const updated = await this.lifecycle.requestMissionChanges(

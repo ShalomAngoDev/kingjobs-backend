@@ -54,7 +54,10 @@ export function buildOpaqueStorageKey(input: {
   ownerId?: string;
   keyPrefix?: string;
 }): string {
-  const prefix = (input.keyPrefix ?? 'verification').replace(/[^a-z0-9_-]/gi, '');
+  const prefix = (input.keyPrefix ?? 'verification').replace(
+    /[^a-z0-9_-]/gi,
+    '',
+  );
   const ownerHash = input.ownerId
     ? createHash('sha256').update(input.ownerId).digest('hex').slice(0, 16)
     : 'anonymous';
@@ -93,8 +96,10 @@ export function sanitizeOriginalFilename(
     .replace(/\\/g, '/')
     .split('/')
     .pop()!
+    // Strip C0 controls + DEL (filename UX only).
+    // eslint-disable-next-line no-control-regex -- intentional control-char strip
     .replace(/[\u0000-\u001f\u007f]/g, '')
-    .replace(/[^\w.\- ()\[\]]+/g, '_')
+    .replace(/[^\w.\- ()[\]]+/g, '_')
     .trim();
   if (!base || base === '.' || base === '..') return null;
   return base.slice(0, 180);

@@ -78,7 +78,10 @@ export class E2ePrismaModule {}
     MissionVerificationService,
     MissionIncidentsService,
     MissionReviewService,
-    { provide: EmailService, useValue: { send: async () => undefined } },
+    {
+      provide: EmailService,
+      useValue: { send: () => Promise.resolve(undefined) },
+    },
     { provide: APP_FILTER, useClass: GlobalExceptionFilter },
     { provide: APP_GUARD, useClass: HeaderAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },

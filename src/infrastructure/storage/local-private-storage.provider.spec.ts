@@ -95,7 +95,7 @@ describe('InMemoryStorageProvider', () => {
       ownerId: 'u1',
     });
     expect(await readAll(await storage.getStream(key))).toEqual(buffer);
-    expect(await storage.getSignedUrl!(key, 60)).toContain('memory://signed/');
+    expect(await storage.getSignedUrl(key, 60)).toContain('memory://signed/');
     await storage.delete(key);
     await expect(storage.getStream(key)).rejects.toBeInstanceOf(
       StorageObjectNotFoundError,

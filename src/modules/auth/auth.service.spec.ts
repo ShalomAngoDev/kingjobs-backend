@@ -107,7 +107,7 @@ describe('AuthService', () => {
         countryCode: 'BJ',
         phone: '+22990123456',
         password: 'password12345',
-        acceptTerms: false as unknown as true,
+        acceptTerms: false,
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
   });

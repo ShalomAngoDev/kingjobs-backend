@@ -19,9 +19,9 @@ const PROD_STORAGE_HINT =
 function hasObjectStorageCredentials(storage: StorageConfig): boolean {
   return Boolean(
     storage.s3.bucket &&
-      storage.s3.accessKeyId &&
-      storage.s3.secretAccessKey &&
-      storage.s3.region,
+    storage.s3.accessKeyId &&
+    storage.s3.secretAccessKey &&
+    storage.s3.region,
   );
 }
 

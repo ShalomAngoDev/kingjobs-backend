@@ -318,9 +318,8 @@ describe('MissionApplicationsService', () => {
         service.select(world.client.id, mission.id, second.id),
       ).rejects.toBeInstanceOf(ConflictException);
       expect(
-        (
-          await db.missionApplication.findUnique({ where: { id: second.id } })
-        )?.status,
+        (await db.missionApplication.findUnique({ where: { id: second.id } }))
+          ?.status,
       ).toBe(MissionApplicationStatus.MISSION_FILLED);
     });
 
