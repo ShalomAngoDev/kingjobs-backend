@@ -11,6 +11,11 @@ import {
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../auth/auth.types';
+import {
+  ListNotificationsQueryDto,
+  MarkAllReadQueryDto,
+  UnreadNotificationsQueryDto,
+} from './dto/list-notifications-query.dto';
 import { NotificationsService } from './notifications.service';
 
 @ApiTags('notifications')
@@ -20,25 +25,30 @@ export class MeNotificationsController {
   constructor(private readonly notifications: NotificationsService) {}
 
   @Get('me/notifications')
-  @ApiOperation({ summary: 'Mes notifications in-app (paginées)' })
+  @ApiOperation({
+    summary: 'Mes notifications in-app (paginées, filtrables par espace)',
+  })
   list(
     @CurrentUser() user: AuthenticatedUser,
-    @Query('limit') limit?: string,
-    @Query('page') page?: string,
+    @Query() query: ListNotificationsQueryDto,
   ) {
-    const parsedLimit = limit ? Number(limit) : 20;
-    const parsedPage = page ? Number(page) : 1;
     return this.notifications.listForUser(
       user.id,
-      Number.isFinite(parsedLimit) ? parsedLimit : 20,
-      Number.isFinite(parsedPage) ? parsedPage : 1,
+      query.limit ?? 20,
+      query.page ?? 1,
+      query.space,
     );
   }
 
   @Get('me/notifications/unread-count')
-  @ApiOperation({ summary: 'Nombre de notifications non lues' })
-  unreadCount(@CurrentUser() user: AuthenticatedUser) {
-    return this.notifications.unreadCount(user.id);
+  @ApiOperation({
+    summary: 'Nombre de notifications non lues (filtrable par espace)',
+  })
+  unreadCount(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query() query: UnreadNotificationsQueryDto,
+  ) {
+    return this.notifications.unreadCount(user.id, query.space);
   }
 
   @Post('me/notifications/:id/read')
@@ -53,8 +63,13 @@ export class MeNotificationsController {
 
   @Post('me/notifications/read-all')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Marquer toutes mes notifications comme lues' })
-  markAllRead(@CurrentUser() user: AuthenticatedUser) {
-    return this.notifications.markAllRead(user.id);
+  @ApiOperation({
+    summary: 'Marquer mes notifications comme lues (filtrable par espace)',
+  })
+  markAllRead(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query() query: MarkAllReadQueryDto,
+  ) {
+    return this.notifications.markAllRead(user.id, query.space);
   }
 }

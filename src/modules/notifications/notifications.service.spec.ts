@@ -109,4 +109,60 @@ describe('NotificationsService', () => {
       where: { userId: 'u1', readAt: null },
     });
   });
+
+  it('listForUser filtre par espace et réécrit IDENTITY_VERIFIED', async () => {
+    const row = {
+      id: 'n1',
+      userId: 'u1',
+      type: UserNotificationType.IDENTITY_VERIFIED,
+      title: 'Votre identité est vérifiée',
+      message: 'ok',
+      actionUrl: '/espace-jobber',
+      readAt: null,
+      createdAt: new Date('2026-10-02T12:00:00Z'),
+    };
+    findMany.mockResolvedValue([row]);
+    count.mockResolvedValue(1);
+
+    const result = await service.listForUser('u1', 20, 1, 'client');
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          userId: 'u1',
+          type: {
+            in: [
+              UserNotificationType.IDENTITY_VERIFIED,
+              UserNotificationType.MISSION_APPLICATION_RECEIVED,
+            ],
+          },
+        },
+      }),
+    );
+    expect(result.items[0].actionUrl).toBe('/espace-client');
+  });
+
+  it('markAllRead filtre par espace Jobber', async () => {
+    updateMany.mockResolvedValue({ count: 3 });
+    await expect(service.markAllRead('u1', 'jobber')).resolves.toEqual({
+      updated: 3,
+    });
+    expect(updateMany).toHaveBeenCalledWith({
+      where: {
+        userId: 'u1',
+        type: {
+          in: [
+            UserNotificationType.IDENTITY_VERIFIED,
+            UserNotificationType.JOBBER_PROFILE_VERIFIED,
+            UserNotificationType.JOBBER_VERIFICATION_NEEDS_CHANGES,
+            UserNotificationType.JOBBER_VERIFICATION_REJECTED,
+            UserNotificationType.JOBBER_APPLICATION_SELECTED,
+            UserNotificationType.JOBBER_APPLICATION_REJECTED,
+            UserNotificationType.JOBBER_MISSION_FILLED,
+          ],
+        },
+        readAt: null,
+      },
+      data: { readAt: expect.any(Date) },
+    });
+  });
 });

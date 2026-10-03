@@ -66,7 +66,8 @@ export async function notifyIdentityVerified(
     title: 'Votre identité est vérifiée',
     message: 'Votre identité KingJOBS a été vérifiée.',
     dedupeKey: `identity-verified:${caseId}`,
-    actionUrl: '/espace-jobber',
+    // Lien résolu à la lecture selon l'espace (Client vs Jobber).
+    actionUrl: null,
   });
 }
 
