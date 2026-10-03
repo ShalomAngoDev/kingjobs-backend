@@ -34,6 +34,7 @@ describe('JobberEligibilityService', () => {
       label: string;
       isRequired: boolean;
       isActive: boolean;
+      documentTypeId: string | null;
     }> = {},
   ) => ({
     type: ServiceRequirementType.DOCUMENT,
@@ -41,7 +42,7 @@ describe('JobberEligibilityService', () => {
     label: 'Document',
     isRequired: true,
     isActive: true,
-    documentTypeId: null,
+    documentTypeId: null as string | null,
     ...overrides,
   });
 

@@ -11,9 +11,9 @@ export function toDocumentResponse(
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Content-Security-Policy', "default-src 'none'; sandbox");
   res.setHeader('Cross-Origin-Resource-Policy', 'same-site');
+  // Pas de `length` fixe : évite Content-Length ≠ octets réels (proxy BFF).
   return new StreamableFile(content.stream, {
     type: content.mimeType,
-    length: content.sizeBytes,
     disposition: `inline; filename*=UTF-8''${encodeURIComponent(content.filename)}`,
   });
 }

@@ -68,6 +68,10 @@ async function main() {
     throw new Error('Services plomberie / nettoyage-evenementiel requis (catalogue).');
   }
 
+  // Captures locales : TS ne conserve pas le narrowing dans les closures async.
+  const clientUserId = client.id;
+  type DemoService = NonNullable<typeof plomberie>;
+
   const now = new Date();
   const refSeq = async () => {
     const rows = await prisma.$queryRaw<
@@ -78,7 +82,7 @@ async function main() {
 
   async function createReviewMission(input: {
     referenceSuffix: number;
-    service: typeof plomberie;
+    service: DemoService;
     title: string;
     description: string;
     city: string;
@@ -107,7 +111,7 @@ async function main() {
       data: {
         id,
         reference,
-        clientUserId: client.id,
+        clientUserId,
         serviceId: input.service.id,
         title: input.title,
         description: input.description,
@@ -140,13 +144,13 @@ async function main() {
             {
               fromStatus: null,
               toStatus: MissionStatus.DRAFT,
-              actorUserId: client.id,
+              actorUserId: clientUserId,
               reason: 'Seed démo BO04.1',
             },
             {
               fromStatus: MissionStatus.DRAFT,
               toStatus: MissionStatus.PAYMENT_REQUIRED,
-              actorUserId: client.id,
+              actorUserId: clientUserId,
             },
             {
               fromStatus: MissionStatus.PAYMENT_REQUIRED,
@@ -209,7 +213,7 @@ async function main() {
     durationKnown: false,
     scheduledStartAt: new Date('2026-10-05T14:00:00.000Z'),
   });
-  await attachDemoPhotos(missionA.id, client.id);
+  await attachDemoPhotos(missionA.id, clientUserId);
 
   const missionB = await createReviewMission({
     referenceSuffix: 143,

@@ -4,6 +4,7 @@ import {
   ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import {
   JobberStatus,
   MissionCancellationReason,
@@ -61,9 +62,17 @@ describe('MissionsService', () => {
     db = new InMemoryPrisma();
     world = await seedWorld(db);
     lifecycle = new MissionLifecycleService(db.asPrismaService());
+    const configService = {
+      getOrThrow: jest.fn((key: string) => {
+        if (key === 'app') return { nodeEnv: 'development' };
+        if (key === 'payment') return { provider: 'mock' };
+        throw new Error(`unknown config ${key}`);
+      }),
+    } as unknown as ConfigService;
     service = new MissionsService(
       db.asPrismaService(),
       lifecycle,
+      configService,
       new InMemoryStorageProvider(),
     );
   });
