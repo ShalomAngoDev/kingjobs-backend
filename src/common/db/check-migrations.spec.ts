@@ -27,6 +27,30 @@ describe('check-migrations', () => {
     );
   });
 
+  it('accepts DROP NOT NULL (nullable columns are additive)', () => {
+    const findings = scanSqlContent(
+      'nullable.sql',
+      `ALTER TABLE "users"\n  ALTER COLUMN "email" DROP NOT NULL;\n\nALTER TABLE "users"\n  ALTER COLUMN "date_of_birth" DROP NOT NULL;\n`,
+    );
+    expect(findings.filter((f) => f.severity === 'destructive')).toHaveLength(
+      0,
+    );
+  });
+
+  it('still detects ALTER TABLE DROP COLUMN across lines', () => {
+    const findings = scanSqlContent(
+      'drop-col.sql',
+      `ALTER TABLE "users"\n  DROP COLUMN "legacy_field";\n`,
+    );
+    expect(
+      findings.some(
+        (f) =>
+          f.severity === 'destructive' &&
+          (f.pattern === 'DROP COLUMN' || f.pattern === 'ALTER DROP'),
+      ),
+    ).toBe(true);
+  });
+
   it('fails directory scan on destructive SQL unless override', () => {
     const root = mkdtempSync(join(tmpdir(), 'kj-mig-'));
     const dir = join(root, '20260101000000_bad');

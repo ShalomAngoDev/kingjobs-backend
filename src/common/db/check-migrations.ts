@@ -15,7 +15,12 @@ const DESTRUCTIVE_PATTERNS: Array<{ name: string; regex: RegExp }> = [
   { name: 'DROP DATABASE', regex: /\bDROP\s+DATABASE\b/i },
   { name: 'TRUNCATE', regex: /\bTRUNCATE\b/i },
   { name: 'DROP COLUMN', regex: /\bDROP\s+COLUMN\b/i },
-  { name: 'ALTER DROP', regex: /\bALTER\s+TABLE\b[\s\S]{0,80}\bDROP\b/i },
+  // « DROP NOT NULL » (rendre nullable) est additive : ne pas le traiter comme destructif.
+  {
+    name: 'ALTER DROP',
+    regex:
+      /\bALTER\s+TABLE\b[\s\S]{0,120}\bDROP\b(?!\s+NOT\s+NULL)(?:\s+(?:COLUMN|CONSTRAINT|INDEX|DEFAULT))?/i,
+  },
   {
     name: 'DELETE FROM (unguarded)',
     regex: /\bDELETE\s+FROM\b(?![\s\S]{0,40}\bWHERE\b)/i,
