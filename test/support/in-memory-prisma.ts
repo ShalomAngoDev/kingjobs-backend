@@ -4,7 +4,7 @@ import type { PrismaService } from '../../src/infrastructure/prisma/prisma.servi
 /**
  * Faux PrismaService en mémoire pour les tests missions (unitaires + e2e).
  * Supporte le sous-ensemble de l'API Prisma utilisé par le module missions :
- * findUnique/findFirst/findMany/count/create/update/updateMany, filtres simples
+ * findUnique/findFirst/findMany/count/groupBy/create/update/updateMany, filtres simples
  * (égalité, null, in, not, lt/lte/gt/gte, equals+insensitive), orderBy/skip/take,
  * $transaction interactive (sérialisée + rollback), $queryRaw (nextval) et $executeRaw.
  */
@@ -185,6 +185,40 @@ class Table {
 
   count = (args: { where?: Where } = {}) =>
     Promise.resolve(this.rows.filter((r) => matches(r, args.where)).length);
+
+  /**
+   * Sous-ensemble Prisma groupBy : `by` + where + `_count: { _all: true }`.
+   * Suffisant pour listMine / listAvailable (comptage applications / occurrences).
+   */
+  groupBy = (args: {
+    by: string[];
+    where?: Where;
+    _count?: { _all?: boolean } | true;
+  }) => {
+    const filtered = this.rows.filter((r) => matches(r, args.where));
+    const buckets = new Map<string, { key: Row; count: number }>();
+    for (const row of filtered) {
+      const keyParts = args.by.map((field) => String(row[field]));
+      const mapKey = keyParts.join('\0');
+      const existing = buckets.get(mapKey);
+      if (existing) {
+        existing.count += 1;
+      } else {
+        const key: Row = {};
+        for (const field of args.by) key[field] = row[field];
+        buckets.set(mapKey, { key, count: 1 });
+      }
+    }
+    const wantCount =
+      args._count === true ||
+      (isPlainObject(args._count) && args._count._all === true);
+    return Promise.resolve(
+      [...buckets.values()].map(({ key, count }) => ({
+        ...key,
+        ...(wantCount ? { _count: { _all: count } } : {}),
+      })),
+    );
+  };
 
   create = (args: { data: Row }) => {
     const now = new Date();
@@ -371,6 +405,21 @@ const TABLE_DEFAULTS: Record<string, () => Row> = {
     reason: null,
     metadata: null,
   }),
+  payment: () => ({
+    status: 'PENDING',
+    currency: 'XOF',
+    provider: 'NONE',
+    providerReference: null,
+    confirmedAt: null,
+    failedAt: null,
+    cancelledAt: null,
+  }),
+  missionMedia: () => ({
+    mediaType: 'IMAGE',
+    mimeType: 'image/jpeg',
+    sizeBytes: 0,
+    sortOrder: 0,
+  }),
 };
 
 export class InMemoryPrisma {
@@ -394,6 +443,7 @@ export class InMemoryPrisma {
   readonly missionStatusHistory = this.table('missionStatusHistory');
   readonly missionOccurrence = this.table('missionOccurrence');
   readonly missionMedia = this.table('missionMedia');
+  readonly payment = this.table('payment');
   readonly documentType = this.table('documentType');
   readonly userDocument = this.table('userDocument');
   readonly userDocumentEvent = this.table('userDocumentEvent');
