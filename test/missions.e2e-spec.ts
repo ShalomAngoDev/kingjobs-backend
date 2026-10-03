@@ -47,7 +47,7 @@ describe('Missions API e2e (in-memory store)', () => {
   });
 
   afterAll(async () => {
-    await app.close();
+    if (app) await app.close();
   });
 
   it('requires authentication on every route', async () => {
@@ -219,13 +219,12 @@ describe('Missions API e2e (in-memory store)', () => {
       .set(as(world.jobber))
       .send({})
       .expect(201);
-    await http()
+    const selected = await http()
       .post(`/api/v1/missions/${id}/applications/${application.body.id}/select`)
       .set(as(world.client))
       .expect(200);
-
-    // Paiement : uniquement via le service interne (Backend 05)
-    await missionsService.markPaymentConfirmed(id);
+    // Paiement publication déjà fait : la sélection mène directement à CONFIRMED
+    expect(selected.body.status).toBe('CONFIRMED');
 
     const startCode = await http()
       .post(`/api/v1/missions/${id}/verifications/start-code`)

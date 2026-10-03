@@ -6,11 +6,15 @@ import {
   Module,
   UnauthorizedException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import type { AuthenticatedUser } from '../src/modules/auth/auth.types';
 import { GlobalExceptionFilter } from '../src/common/filters/global-exception.filter';
 import { RolesGuard } from '../src/common/guards/roles.guard';
+import { EmailService } from '../src/infrastructure/email/email.service';
 import { PrismaService } from '../src/infrastructure/prisma/prisma.service';
+import { FILE_STORAGE } from '../src/infrastructure/storage/file-storage.types';
+import { InMemoryStorageProvider } from '../src/infrastructure/storage/in-memory-storage.provider';
 import { EligibilityModule } from '../src/modules/eligibility/eligibility.module';
 import { AdminMissionsController } from '../src/modules/missions/admin-missions.controller';
 import { JobberMissionsController } from '../src/modules/missions/jobber-missions.controller';
@@ -20,9 +24,9 @@ import { MissionIncidentsService } from '../src/modules/missions/mission-inciden
 import { MissionLifecycleService } from '../src/modules/missions/mission-lifecycle.service';
 import { MissionReviewService } from '../src/modules/missions/mission-review.service';
 import { MissionVerificationService } from '../src/modules/missions/mission-verification.service';
-import { EmailService } from '../src/infrastructure/email/email.service';
 import { MissionsController } from '../src/modules/missions/missions.controller';
 import { MissionsService } from '../src/modules/missions/missions.service';
+import { NotificationsService } from '../src/modules/notifications/notifications.service';
 import { InMemoryPrisma } from './support/in-memory-prisma';
 
 export const e2eDb = new InMemoryPrisma();
@@ -79,8 +83,25 @@ export class E2ePrismaModule {}
     MissionIncidentsService,
     MissionReviewService,
     {
+      provide: ConfigService,
+      useValue: {
+        getOrThrow: (key: string) => {
+          if (key === 'app') return { nodeEnv: 'test' };
+          if (key === 'payment') return { provider: 'mock' };
+          throw new Error(`unknown config ${key}`);
+        },
+      },
+    },
+    { provide: FILE_STORAGE, useClass: InMemoryStorageProvider },
+    {
       provide: EmailService,
       useValue: { send: () => Promise.resolve(undefined) },
+    },
+    {
+      provide: NotificationsService,
+      useValue: {
+        createIfAbsent: () => Promise.resolve(null),
+      },
     },
     { provide: APP_FILTER, useClass: GlobalExceptionFilter },
     { provide: APP_GUARD, useClass: HeaderAuthGuard },

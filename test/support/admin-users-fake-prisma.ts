@@ -286,6 +286,15 @@ export class AdminUsersFakePrisma {
       ),
   };
 
+  /** Photos de profil / pièces : aucun document seedé en e2e admin. */
+  readonly documentType = {
+    findUnique: () => Promise.resolve(null),
+  };
+
+  readonly userDocument = {
+    findMany: () => Promise.resolve([] as Row[]),
+  };
+
   asPrismaService(): PrismaService {
     return this as unknown as PrismaService;
   }

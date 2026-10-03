@@ -134,6 +134,9 @@ describe('Admin users API e2e (fake prisma)', () => {
       expect(Object.keys(body.missionsByStatus).sort()).toEqual(
         [
           'DRAFT',
+          'PENDING_REVIEW',
+          'NEEDS_CHANGES',
+          'REJECTED',
           'PUBLISHED',
           'APPLICATION_SELECTED',
           'PAYMENT_REQUIRED',
@@ -212,6 +215,7 @@ describe('Admin users API e2e (fake prisma)', () => {
       expect(Object.keys(item).sort()).toEqual(
         [
           'age',
+          'avatarUrl',
           'createdAt',
           'dateOfBirth',
           'email',
@@ -232,6 +236,7 @@ describe('Admin users API e2e (fake prisma)', () => {
           'updatedAt',
         ].sort(),
       );
+      expect(item.avatarUrl).toBeNull();
       expect(item.dateOfBirth).toBe('1995-05-10');
       expect(item.isMinor).toBe(false);
       expect(item.age).toBeGreaterThanOrEqual(30);
