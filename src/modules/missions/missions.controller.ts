@@ -97,9 +97,10 @@ export class MissionsController {
     );
     res.setHeader('Cache-Control', 'private, max-age=300');
     res.setHeader('X-Content-Type-Options', 'nosniff');
+    // Pas de `length` fixe : évite Content-Length ≠ octets réels
+    // (fichiers restaurés / désync DB) qui fait planter le proxy BFF (fetch terminated).
     return new StreamableFile(content.stream, {
       type: content.mimeType,
-      length: content.sizeBytes,
       disposition: `inline; filename*=UTF-8''${encodeURIComponent(content.filename)}`,
     });
   }
